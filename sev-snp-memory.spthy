@@ -1,0 +1,81 @@
+theory SEV_SNP_MEMORY begin
+
+restriction Unique:
+  " All x #i #j.
+    Uniq(x)@i & Uniq(x)@j ==> (#i = #j)
+  "
+
+rule InitializePage:
+    []
+    --[ 
+        InitializePage($SPA),
+        Uniq(<'SYS_ADDR', $SPA>)
+    ]->
+    [ 
+        !SystemPA($SPA),
+        PageState($SPA, 'HYPERVISOR')
+    ]
+
+rule AssignToFW:
+    [
+        !SystemPA($SPA),
+        PageState($SPA, 'HYPERVISOR')
+    ]
+    --[
+        TransferOwnership('HYPERVISOR', 'FIRMWARE')
+    ]->
+    [
+        PageState($SPA, 'FIRMWARE')
+    ]
+
+rule AssignToGVM:
+    [
+        !SystemPA($SPA),
+        PageState($SPA, 'HYPERVISOR')
+    ]
+    --[
+        TransferOwnership('HYPERVISOR', 'GUEST'),
+        Uniq(<'GUEST_ADDR', $GPA>)
+    ]->
+    [
+        !GuestPA($GPA),
+        PageState($SPA, 'GUEST')
+    ]
+
+rule ReturnFromGVM:
+    [
+        !SystemPA($SPA),
+        PageState($SPA, 'GUEST')
+    ]
+    --[
+        TransferOwnership('GUEST', 'HYPERVISOR')
+    ]->
+    [
+        PageState($SPA, 'HYPERVISOR')
+    ]
+
+rule ReturnFromFW:
+    [
+        !SystemPA($SPA),
+        PageState($SPA, 'FIRMWARE')
+    ]
+    --[
+        TransferOwnership('FIRMWARE', 'HYPERVISOR')
+    ]->
+    [
+        PageState($SPA, 'HYPERVISOR')
+    ]
+
+rule GuestValidate:
+    [
+        !SystemPA($SPA),
+        !GuestPA($GPA),
+        PageState($SPA, 'GUEST')
+    ]
+    --[
+        GuestValidate($GPA)
+    ]->
+    [
+        PageState($SPA, 'GUEST'),
+        Validated($SPA, $GPA)
+    ]
