@@ -15,7 +15,7 @@ rule InitializePage:
     [ 
         !SystemPA(SPA),
         PageState(SPA, 'HYPERVISOR'),
-        PageContent('')
+        PageContent(SPA, '')
     ]
 
 rule AssignToFW:
@@ -95,21 +95,21 @@ rule WriteToPage:
     ]->
     [
         PageState(SPA, owner),
-        PageContent(content)
+        PageContent(SPA, content)
     ]
 
 rule ReadFromPage:
     [ 
         !SystemPA(SPA),
         PageState(SPA, owner),
-        PageContent(content)
+        PageContent(SPA, content)
     ]
     --[
         Read(SPA, owner, content)
     ]->
     [
         PageState(SPA, owner),
-        PageContent(content)
+        PageContent(SPA, content)
     ]
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
