@@ -6,104 +6,122 @@ restriction Unique:
   "
 
 rule InitializePage:
-    []
+    [
+        Fr(SPA)
+    ]
     --[ 
-        InitializePage($SPA),
-        Uniq(<'SYS_ADDR', $SPA>)
+        InitializePage(SPA)
     ]->
     [ 
-        !SystemPA($SPA),
-        PageState($SPA, 'HYPERVISOR'),
+        !SystemPA(SPA),
+        PageState(SPA, 'HYPERVISOR'),
         PageContent('')
     ]
 
 rule AssignToFW:
     [
-        !SystemPA($SPA),
-        PageState($SPA, 'HYPERVISOR')
+        !SystemPA(SPA),
+        PageState(SPA, 'HYPERVISOR')
     ]
     --[
-        TransferOwnership('HYPERVISOR', 'FIRMWARE')
+        TransferOwnership(SPA, 'HYPERVISOR', 'FIRMWARE')
     ]->
     [
-        PageState($SPA, 'FIRMWARE')
+        PageState(SPA, 'FIRMWARE')
     ]
 
 rule AssignToGVM:
     [
-        !SystemPA($SPA),
-        PageState($SPA, 'HYPERVISOR')
+        !SystemPA(SPA),
+        PageState(SPA, 'HYPERVISOR'),
+        Fr(GPA),
+        Fr(pageID)
     ]
     --[
-        TransferOwnership('HYPERVISOR', 'GUEST'),
-        Uniq(<'GUEST_ADDR', $GPA>)
+        TransferOwnership(SPA, 'HYPERVISOR', 'GUEST'),
+        RMPUpdate(SPA, GPA, pageID)
     ]->
     [
-        !GuestPA($GPA),
-        PageState($SPA, 'GUEST')
+        !RMPEntry(SPA, GPA, pageID),
+        PageState(SPA, 'GUEST')
     ]
 
 rule ReturnFromGVM:
     [
-        !SystemPA($SPA),
-        PageState($SPA, 'GUEST')
+        !SystemPA(SPA),
+        PageState(SPA, 'GUEST')
     ]
     --[
-        TransferOwnership('GUEST', 'HYPERVISOR')
+        TransferOwnership(SPA, 'GUEST', 'HYPERVISOR'),
+        Free(pageID)
     ]->
     [
-        PageState($SPA, 'HYPERVISOR')
+        PageState(SPA, 'HYPERVISOR')
     ]
 
 rule ReturnFromFW:
     [
-        !SystemPA($SPA),
-        PageState($SPA, 'FIRMWARE')
+        !SystemPA(SPA),
+        PageState(SPA, 'FIRMWARE')
     ]
     --[
-        TransferOwnership('FIRMWARE', 'HYPERVISOR')
+        TransferOwnership(SPA, 'FIRMWARE', 'HYPERVISOR')
     ]->
     [
-        PageState($SPA, 'HYPERVISOR')
+        PageState(SPA, 'HYPERVISOR')
     ]
 
 rule GuestValidate:
     [
-        !SystemPA($SPA),
-        !GuestPA($GPA),
-        PageState($SPA, 'GUEST')
+        !SystemPA(SPA),
+        !RMPEntry(SPA, GPA, pageID),
+        PageState(SPA, 'GUEST')
     ]
     --[
-        GuestValidate($GPA)
+        GuestValidate(GPA, SPA, pageID)
     ]->
     [
-        PageState($SPA, 'GUEST'),
-        Validated($SPA, $GPA)
+        PageState(SPA, 'GUEST'),
+        Validated(SPA, GPA)
     ]
 
 rule WriteToPage:
     [
-        !SystemPA($SPA),
-        PageState($SPA, $owner),
-        PageContent($beforeWrite)
+        !SystemPA(SPA),
+        PageState(SPA, owner)
     ]
     --[
-        WriteToPage($SPA, $owner, $beforeWrite, $afterWrite)
+        Write(SPA, owner, content)
     ]->
     [
-        PageState($SPA, $owner),
-        PageContent($afterWrite)
+        PageState(SPA, owner),
+        PageContent(content)
+    ]
+
+rule ReadFromPage:
+    [ 
+        !SystemPA(SPA),
+        PageState(SPA, owner),
+        PageContent(content)
+    ]
+    --[
+        Read(SPA, owner, content)
+    ]->
+    [
+        PageState(SPA, owner),
+        PageContent(content)
     ]
 
 
 lemma OnlyOwnerCanWriteToPage:
 "
-    All $SPA, $owner, $before, $after, #i. (WriteToPage($SPA, $owner, $before, $after) @ i ==>
-    (Ex $prevOwner, #j. (TransferOwnership($prevOwner, $owner) @ j 
-    & not (Ex $newOwner, #k. TransferOwnership($owner, $newOwner) @ k & j < k))))
+    All SPA, owner, content, #i. (Write(SPA, owner, content) @ i ==>
+    (Ex prevOwner, #j. (TransferOwnership(SPA, prevOwner, owner) @ j 
+    & not (Ex newOwner, #k. TransferOwnership(owner, newOwner) @ k & j < k))))
 "
 
 lemma SPAMapsToUniqueGPA:
 "
-    All $SPA, $GPA. 
+    All SPA, GPA1, GPA2, ptr1, ptr2, #i, #j. RMPUpdate(SPA, GPA1, ptr1) @ i & RMPUpdate(SPA, GPA2, ptr2) @ j ==>
+    GPA1 = GPA2 | (Ex #k. Free(ptr1) @ k & i < k & k < j) | (Ex #l. Free(ptr2) @ l & j < l & l < i)
 "
