@@ -178,13 +178,14 @@ lemma ExeGuestCanWriteAfterValidation: exists-trace
 
 lemma OnlyOwnerCanWriteToPage:
 "
-    All SPA, owner, content, #i. (Write(SPA, owner, content) @ i ==>
-    (Ex prevOwner, #j. (TransferOwnership(SPA, prevOwner, owner) @ j 
-    & not (Ex newOwner, #k. TransferOwnership(owner, newOwner) @ k & j < k))))
+    All ptr1 SPA owner content #i. (Write(ptr1, SPA, owner, content) @ i ==>
+    (Ex ptr2 #j. RMPUpdate(ptr2, SPA, owner) @ j) & (#j < #i)
+    & not ((Ex ptr2 newOwner #k. RMPUpdate(ptr2, SPA, newOwner) @ k) & (#j < #k) & (#k < #i)))
 "
 
 lemma SPAMapsToUniqueGPA:
 "
-    All SPA, GPA1, GPA2, ptr1, ptr2, #i, #j. RMPUpdate(SPA, GPA1, ptr1) @ i & RMPUpdate(SPA, GPA2, ptr2) @ j ==>
-    GPA1 = GPA2 | (Ex #k. Free(ptr1) @ k & i < k & k < j) | (Ex #l. Free(ptr2) @ l & j < l & l < i)
+    All SPA GPA1 GPA2 GID val1 val2 ptr1 ptr2 #i #j. 
+    ((RMPUpdate(ptr1, SPA, <GID, GPA1, val1>) @ i & RMPUpdate(ptr2, SPA, <GID, GPA2, val2>) @ j & #i < #j) ==>
+    GPA1 = GPA2 | (Ex #k. Free(ptr1) @ k & #i < #k & #k < #j))
 "
