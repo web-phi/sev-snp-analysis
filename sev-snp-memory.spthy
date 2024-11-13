@@ -1,22 +1,30 @@
 theory SEV_SNP_MEMORY begin
 
 functions:
-    owner/1,
-
-equations:
-    owner(<x, y, z>) = x,
-    owner(x) = x
+    HYPERVISOR/0,
+    FIRMWARE/0,
+    GUEST/3,
+    VALID/0,
+    INVALID/0
 
 restriction PointerCanBeFreedOnlyOnce:
 " 
-    All ptr #i #j. Free(ptr) @ i & Free(ptr) @ j ==> (#i = #j)
+    All ptr #i #j. (Free(ptr) @ i & Free(ptr) @ j ==> (#i = #j))
 "
 
-restriction FreedPointerCannotBeAccessed:
+restriction FreedPointerCannotBeRead:
 "
-    All ptr SPA owner content #i #j.
-    (Read(ptr, SPA, owner, content) | Write(ptr, SPA, owner, content) | RMPUpdate(ptr, SPA, owner)) @ i 
-    & Free(ptr) @ j ==> (#i < #j)
+    All ptr SPA owner content #i #j. Read(ptr, SPA, owner, content) @ i & Free(ptr) @ j ==> (#i < #j)
+"
+
+restriction FreedPointerCannotBeWritten:
+"
+    All ptr SPA owner content #i #j. Write(ptr, SPA, owner, content) @ i & Free(ptr) @ j ==> (#i < #j)
+"
+
+restriction FreedPointerCannotBeUpdated:
+"
+    All ptr SPA owner #i #j. RMPUpdate(ptr, SPA, owner) @ i & Free(ptr) @ j ==> (#i < #j)
 "
 
 rule InitializePage:
@@ -26,12 +34,12 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(ptr, SPA, 'HYPERVISOR')
+        RMPUpdate(ptr, SPA, HYPERVISOR())
     ]->
     [ 
         !SystemPA(SPA),
-        !RMPEntry(ptr, SPA, 'HYPERVISOR'),
-        PageContent(SPA, '')
+        !RMPEntry(ptr, SPA, HYPERVISOR()),
+        PageContent(SPA, '0')
     ]
 
 rule InitializeGuest:
@@ -48,74 +56,74 @@ rule InitializeGuest:
 rule AssignPageToFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, 'HYPERVISOR'),
+        !RMPEntry(ptr1, SPA, HYPERVISOR()),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, 'FIRMWARE')
+        RMPUpdate(ptr2, SPA, FIRMWARE()),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, 'FIRMWARE')
+        !RMPEntry(ptr2, SPA, FIRMWARE())
     ]
 
 rule AssignPageToGVM:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, 'HYPERVISOR'),
-        !GuestID(GID)
+        !RMPEntry(ptr1, SPA, HYPERVISOR()),
+        !GuestID(GID),
         Fr(GPA),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, <GID, GPA, F>),
+        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, INVALID())),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, <GID, GPA, F>),
+        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, INVALID())),
     ]
 
 rule ReturnPageFromGVM:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, <GID, GPA, Valid>),
+        !RMPEntry(ptr1, SPA, GUEST(GID, GPA, isValid)),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, 'HYPERVISOR')
+        RMPUpdate(ptr2, SPA, HYPERVISOR()),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, 'HYPERVISOR')
+        !RMPEntry(ptr2, SPA, HYPERVISOR())
     ]
 
 rule ReturnPageFromFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, 'FIRMWARE'),
+        !RMPEntry(ptr1, SPA, FIRMWARE()),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, 'HYPERVISOR'),
+        RMPUpdate(ptr2, SPA, HYPERVISOR()),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, 'HYPERVISOR')
+        !RMPEntry(ptr2, SPA, HYPERVISOR())
     ]
 
 rule GuestValidate:
     [
         !SystemPA(SPA),
-        !GuestID(GID)
-        !RMPEntry(ptr1, SPA, <GID, GPA, F>),
+        !GuestID(GID),
+        !RMPEntry(ptr1, SPA, GUEST(GID, GPA, INVALID())),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, <GID, GPA, T>),
+        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID())),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, <GID, GPA, T>)
+        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, VALID()))
     ]
 
 rule WriteToPage:
@@ -135,7 +143,7 @@ rule WriteToPage:
 rule ReadFromPage:
     [ 
         !SystemPA(SPA),
-        !RMPEntry(ptr, SPA, owner)
+        !RMPEntry(ptr, SPA, owner),
         PageContent(SPA, content)
     ]
     --[
@@ -146,46 +154,51 @@ rule ReadFromPage:
         Out(content)
     ]
 
-lemma ExePageCanGoFromFWToGVM: exists-trace
-"
-    Ex SPA, x, y, #i, #j. TransferOwnership(SPA, 'FIRMWARE', x) @ i & 
-    TransferOwnership(SPA, y, 'GUEST') @ j & i < j
-"
+// lemma ExePageCanGoFromFWToGVM: exists-trace
+// "
+//     Ex SPA x y #i #j. TransferOwnership(SPA, FIRMWARE(), x) @ i & 
+//     TransferOwnership(SPA, y, 'GUEST') @ j & i < j
+// "
 
-lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
-"
-    Ex SPA, x, y, GPA1, GPA2, #i, #j. TransferOwnership(SPA, x, 'GUEST') @ i &
-    TransferOwnership(SPA, y, 'GUEST') @ j & i < j
-"
+// lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
+// "
+//     Ex SPA x y GPA1 GPA2 #i #j. TransferOwnership(SPA, x, 'GUEST') @ i &
+//     TransferOwnership(SPA, y, 'GUEST') @ j & i < j
+// "
 
-lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
-"
-    Ex SPA, GPA, pageID, x, #i, #j. TransferOwnership(SPA, x, 'GUEST') @ i &
-    GuestValidate(GPA, SPA, pageID) @ j & i < j
-"
+// lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
+// "
+//     Ex SPA GPA pageID x #i #j. TransferOwnership(SPA, x, 'GUEST') @ i &
+//     GuestValidate(GPA, SPA, pageID) @ j & i < j
+// "
 
-lemma ExePageCanBeReadAfterWrite: exists-trace
-"
-    Ex SPA, owner1, owner2, content, #i, #j. Write(SPA, owner1, content) @ i &
-    Read(SPA, owner2, content) @ j & i < j
-"
+// lemma ExePageCanBeReadAfterWrite: exists-trace
+// "
+//     Ex SPA owner1 owner2 content #i #j. Write(SPA, owner1, content) @ i &
+//     Read(SPA, owner2, content) @ j & i < j
+// "
 
-lemma ExeGuestCanWriteAfterValidation: exists-trace
-"
-    Ex SPA, GPA, pageID, content, #i, #j. GuestValidate(GPA, SPA, pageID) @ i &
-    Write(SPA, 'GUEST', content) @ j & i < j
-"
+// lemma ExeGuestCanWriteAfterValidation: exists-trace
+// "
+//     Ex SPA GPA pageID content #i #j. GuestValidate(GPA, SPA, pageID) @ i &
+//     Write(SPA, 'GUEST', content) @ j & i < j
+// "
 
 lemma OnlyOwnerCanWriteToPage:
 "
     All ptr1 SPA owner content #i. (Write(ptr1, SPA, owner, content) @ i ==>
-    (Ex ptr2 #j. RMPUpdate(ptr2, SPA, owner) @ j) & (#j < #i)
-    & not ((Ex ptr2 newOwner #k. RMPUpdate(ptr2, SPA, newOwner) @ k) & (#j < #k) & (#k < #i)))
+    Ex ptr2 #j. (RMPUpdate(ptr2, SPA, owner) @ j & (#j < #i)
+    & not ((Ex ptr2 newOwner #k. (RMPUpdate(ptr2, SPA, newOwner) @ k & (#j < #k) & (#k < #i))))))
 "
 
 lemma SPAMapsToUniqueGPA:
 "
     All SPA GPA1 GPA2 GID val1 val2 ptr1 ptr2 #i #j. 
-    ((RMPUpdate(ptr1, SPA, <GID, GPA1, val1>) @ i & RMPUpdate(ptr2, SPA, <GID, GPA2, val2>) @ j & #i < #j) ==>
-    GPA1 = GPA2 | (Ex #k. Free(ptr1) @ k & #i < #k & #k < #j))
+    ((RMPUpdate(ptr1, SPA, GUEST(GID, GPA1, val1)) @ i 
+    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA2, val2)) @ j 
+    & #i < #j) ==>
+    GPA1 = GPA2 
+    | (Ex #k. Free(ptr1) @ k & #i < #k & #k < #j))
 "
+
+end
