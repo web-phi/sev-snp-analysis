@@ -80,7 +80,7 @@ rule AssignPageToGVM:
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, INVALID())),
+        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, INVALID()))
     ]
 
 rule ReturnPageFromGVM:
@@ -174,10 +174,10 @@ lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
 
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
 "
-    Ex ptr1 ptr2 SPA GPA pageID x #i #j. 
+    Ex ptr1 ptr2 SPA GID GPA #i #j. 
     (RMPUpdate(ptr1, SPA, GUEST(GID, GPA, INVALID())) @ i
     & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID())) @ j 
-    & Free(ptr1)
+    & Free(ptr1) @ j
     & (#i < #j))
 "
 
