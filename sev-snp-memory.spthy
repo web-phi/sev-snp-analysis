@@ -34,11 +34,11 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(ptr, SPA, HYPERVISOR())
+        RMPUpdate(ptr, SPA, HYPERVISOR)
     ]->
     [ 
         !SystemPA(SPA),
-        !RMPEntry(ptr, SPA, HYPERVISOR()),
+        !RMPEntry(ptr, SPA, HYPERVISOR),
         PageContent(SPA, '0')
     ]
 
@@ -56,31 +56,31 @@ rule InitializeGuest:
 rule AssignPageToFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, HYPERVISOR()),
+        !RMPEntry(ptr1, SPA, HYPERVISOR),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, FIRMWARE()),
+        RMPUpdate(ptr2, SPA, FIRMWARE),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, FIRMWARE())
+        !RMPEntry(ptr2, SPA, FIRMWARE)
     ]
 
 rule AssignPageToGVM:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, HYPERVISOR()),
+        !RMPEntry(ptr1, SPA, HYPERVISOR),
         !GuestID(GID),
         Fr(GPA),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, INVALID())),
+        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, INVALID)),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, INVALID()))
+        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, INVALID))
     ]
 
 rule ReturnPageFromGVM:
@@ -90,40 +90,40 @@ rule ReturnPageFromGVM:
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, HYPERVISOR()),
+        RMPUpdate(ptr2, SPA, HYPERVISOR),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, HYPERVISOR())
+        !RMPEntry(ptr2, SPA, HYPERVISOR)
     ]
 
 rule ReturnPageFromFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(ptr1, SPA, FIRMWARE()),
+        !RMPEntry(ptr1, SPA, FIRMWARE),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, HYPERVISOR()),
+        RMPUpdate(ptr2, SPA, HYPERVISOR),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, HYPERVISOR())
+        !RMPEntry(ptr2, SPA, HYPERVISOR)
     ]
 
 rule GuestValidate:
     [
         !SystemPA(SPA),
         !GuestID(GID),
-        !RMPEntry(ptr1, SPA, GUEST(GID, GPA, INVALID())),
+        !RMPEntry(ptr1, SPA, GUEST(GID, GPA, INVALID)),
         Fr(ptr2)
     ]
     --[
-        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID())),
+        RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID)),
         Free(ptr1)
     ]->
     [
-        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, VALID()))
+        !RMPEntry(ptr2, SPA, GUEST(GID, GPA, VALID))
     ]
 
 rule WriteToPage:
@@ -157,7 +157,7 @@ rule ReadFromPage:
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
     Ex ptr1 ptr2 SPA GID GPA val #i #j #k. 
-    (RMPUpdate(ptr1, SPA, FIRMWARE()) @ i 
+    (RMPUpdate(ptr1, SPA, FIRMWARE) @ i 
     & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, val)) @ k 
     & Free(ptr1) @ j & not (Free(ptr2) @ k)
     & (#i < #j) & (#j < #k))
@@ -175,8 +175,8 @@ lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
 "
     Ex ptr1 ptr2 SPA GID GPA #i #j. 
-    (RMPUpdate(ptr1, SPA, GUEST(GID, GPA, INVALID())) @ i
-    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID())) @ j 
+    (RMPUpdate(ptr1, SPA, GUEST(GID, GPA, INVALID)) @ i
+    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID)) @ j 
     & Free(ptr1) @ j
     & (#i < #j))
 "
@@ -189,8 +189,8 @@ lemma ExePageCanBeReadAfterWrite: exists-trace
 
 lemma ExeGuestCanWriteAfterValidation: exists-trace
 "
-    Ex ptr1 ptr2 SPA GID GPA content #i #j. RMPUpdate(ptr1, SPA, GUEST(GID, GPA, VALID())) @ i &
-    Write(ptr2, SPA, GUEST(GID, GPA, VALID()), content) @ j & #i < #j
+    Ex ptr1 ptr2 SPA GID GPA content #i #j. RMPUpdate(ptr1, SPA, GUEST(GID, GPA, VALID)) @ i &
+    Write(ptr2, SPA, GUEST(GID, GPA, VALID), content) @ j & #i < #j
 "
 
 lemma OnlyOwnerCanWriteToPage:
