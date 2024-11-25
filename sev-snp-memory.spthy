@@ -154,35 +154,44 @@ rule ReadFromPage:
         Out(content)
     ]
 
-// lemma ExePageCanGoFromFWToGVM: exists-trace
-// "
-//     Ex SPA x y #i #j. TransferOwnership(SPA, FIRMWARE(), x) @ i & 
-//     TransferOwnership(SPA, y, 'GUEST') @ j & i < j
-// "
+lemma ExePageCanGoFromFWToGVM: exists-trace
+"
+    Ex ptr1 ptr2 SPA GID GPA val #i #j #k. 
+    (RMPUpdate(ptr1, SPA, FIRMWARE()) @ i 
+    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, val)) @ k 
+    & Free(ptr1) @ j & not (Free(ptr2) @ k)
+    & (#i < #j) & (#j < #k))
+"
 
-// lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
-// "
-//     Ex SPA x y GPA1 GPA2 #i #j. TransferOwnership(SPA, x, 'GUEST') @ i &
-//     TransferOwnership(SPA, y, 'GUEST') @ j & i < j
-// "
+lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
+"
+    Ex ptr1 ptr2 SPA GID GPA1 GPA2 val1 val2 #i #j #k. 
+    (RMPUpdate(ptr1, SPA, GUEST(GID, GPA1, val1)) @ i
+    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA2, val2)) @ k 
+    & Free(ptr1) @ j & not (Free(ptr2) @ k)
+    & (#i < #j) & (#j < #k))
+"
 
-// lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
-// "
-//     Ex SPA GPA pageID x #i #j. TransferOwnership(SPA, x, 'GUEST') @ i &
-//     GuestValidate(GPA, SPA, pageID) @ j & i < j
-// "
+lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
+"
+    Ex ptr1 ptr2 SPA GPA pageID x #i #j. 
+    (RMPUpdate(ptr1, SPA, GUEST(GID, GPA, INVALID())) @ i
+    & RMPUpdate(ptr2, SPA, GUEST(GID, GPA, VALID())) @ j 
+    & Free(ptr1)
+    & (#i < #j))
+"
 
-// lemma ExePageCanBeReadAfterWrite: exists-trace
-// "
-//     Ex SPA owner1 owner2 content #i #j. Write(SPA, owner1, content) @ i &
-//     Read(SPA, owner2, content) @ j & i < j
-// "
+lemma ExePageCanBeReadAfterWrite: exists-trace
+"
+    Ex ptr1 ptr2 SPA owner1 owner2 content #i #j. Write(ptr1, SPA, owner1, content) @ i &
+    Read(ptr2, SPA, owner2, content) @ j & #i < #j
+"
 
-// lemma ExeGuestCanWriteAfterValidation: exists-trace
-// "
-//     Ex SPA GPA pageID content #i #j. GuestValidate(GPA, SPA, pageID) @ i &
-//     Write(SPA, 'GUEST', content) @ j & i < j
-// "
+lemma ExeGuestCanWriteAfterValidation: exists-trace
+"
+    Ex ptr1 ptr2 SPA GID GPA content #i #j. RMPUpdate(ptr1, SPA, GUEST(GID, GPA, VALID())) @ i &
+    Write(ptr2, SPA, GUEST(GID, GPA, VALID()), content) @ j & #i < #j
+"
 
 lemma OnlyOwnerCanWriteToPage:
 "
