@@ -5,7 +5,15 @@ functions:
     FIRMWARE/0,
     GUEST/3,
     VALID/0,
-    INVALID/0
+    INVALID/0,
+    owner/1,
+    gpa/1,
+    validated/1
+
+equations:
+    owner(GUEST(x,y,z)) = x,
+    gpa(GUEST(x,y,z)) = y,
+    validated(GUEST(x,y,z)) = z
 
 restriction PointerCanBeDroppedOnlyOnce:
 " 
@@ -83,7 +91,7 @@ rule AssignPageToGVM:
         !RMPEntry(row2, SPA, GUEST(GID, GPA, INVALID))
     ]
 
-rule ReturnPageFromGVM[no_derivcheck]:
+rule ReturnPageFromGVM:
     [
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, GUEST(GID, GPA, isValid)),
@@ -111,7 +119,7 @@ rule ReturnPageFromFW:
         !RMPEntry(row2, SPA, HYPERVISOR)
     ]
 
-rule GuestValidate[no_derivcheck]:
+rule GuestValidate:
     [
         !SystemPA(SPA),
         !GuestID(GID),
