@@ -189,7 +189,7 @@ lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
     & (#i < #j) & (#j < #k | #j = #k)
 "
 
-lemma ExePageCanBeReadAfterWrite: exists-trace
+lemma ExePageCanBeReadAfterWrite[use_induction]: exists-trace
 "
     Ex row1 row2 SPA owner1 owner2 content #i #j. Write(row1, SPA, owner1, content) @ i &
     Read(row2, SPA, owner2, content) @ j & (#i < #j)
