@@ -192,7 +192,6 @@ rule ReadFromPage:
         !SystemPA(SPA),
         !RMPEntry(row, SPA, owner),
         !Ltk(ltk, owner(owner)),
-        In(senc(<ltk, SPA>, content)),
         PageContent(SPA, content)
     ]
     --[
