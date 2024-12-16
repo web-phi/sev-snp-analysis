@@ -1,5 +1,7 @@
 theory SEV_SNP_MEMORY begin
 
+builtins: symmetric-encryption
+
 functions:
     HYPERVISOR/0,
     FIRMWARE/0,
@@ -11,6 +13,8 @@ functions:
     validated/1
 
 equations:
+    owner(HYPERVISOR) = HYPERVISOR,
+    owner(FIRMWARE) = FIRMWARE,
     owner(GUEST(x,y,z)) = x,
     gpa(GUEST(x,y,z)) = y,
     validated(GUEST(x,y,z)) = z
@@ -59,6 +63,40 @@ rule InitializeGuest:
     ]->
     [ 
         !GuestID(GID)
+    ]
+
+rule GenerateHypervisorLtk:
+    [
+        Fr(ltk)
+    ]
+    --[
+        GenerateHypervisorLtk(ltk)
+    ]->
+    [
+        !Ltk(ltk, HYPERVISOR)
+    ]
+
+rule GenerateFirmwareLtk:
+    [
+        Fr(ltk)
+    ]
+    --[
+        GenerateFirmwareLtk(ltk)
+    ]->
+    [
+        !Ltk(ltk, FIRMWARE)
+    ]
+
+rule GenerateGuestLtk:
+    [
+        Fr(ltk),
+        !GuestID(GID)
+    ]
+    --[
+        GenerateGuestLtk(ltk, GID)
+    ]->
+    [
+        !Ltk(ltk, GID)
     ]
 
 rule AssignPageToFW:
@@ -138,20 +176,23 @@ rule WriteToPage:
     [
         !SystemPA(SPA),
         !RMPEntry(row, SPA, owner),
-        PageContent(SPA, oldContent),
-        In(newContent)
+        !Ltk(ltk, owner(owner)),
+        In(newContentEncrypted),
+        PageContent(SPA, oldContent)
     ]
     --[
-        Write(row, SPA, owner, newContent)
+        Write(row, SPA, owner, sdec(<ltk, SPA>, newContentEncrypted))
     ]->
     [
-        PageContent(SPA, newContent)
+        PageContent(SPA, sdec(<ltk, SPA>, newContentEncrypted))
     ]
 
 rule ReadFromPage:
     [ 
         !SystemPA(SPA),
         !RMPEntry(row, SPA, owner),
+        !Ltk(ltk, owner(owner)),
+        In(senc(<ltk, SPA>, content)),
         PageContent(SPA, content)
     ]
     --[
@@ -159,7 +200,7 @@ rule ReadFromPage:
     ]->
     [
         PageContent(SPA, content),
-        Out(content)
+        Out(senc(<ltk, SPA>, content))
     ]
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
@@ -189,10 +230,13 @@ lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
     & (#i < #j) & (#j < #k | #j = #k)
 "
 
-lemma ExePageCanBeReadAfterWrite[use_induction]: exists-trace
+lemma ExePageCanBeReadAfterWrite: exists-trace
 "
-    Ex row1 row2 SPA owner1 owner2 content #i #j. Write(row1, SPA, owner1, content) @ i &
-    Read(row2, SPA, owner2, content) @ j & (#i < #j)
+    Ex row1 row2 SPA owner1 owner2 content #i #j. 
+    Write(row1, SPA, owner1, content) @ i 
+    & Read(row2, SPA, owner2, content) @ j 
+    & (#i < #j)
+    & not (Ex rowOther ownerOther #k. Read(rowOther, SPA, ownerOther, content) @ k & (#i < #k) & (#k < #j))
 "
 
 lemma ExeGuestCanWriteAfterValidation: exists-trace
