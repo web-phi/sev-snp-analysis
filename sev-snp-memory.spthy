@@ -25,7 +25,7 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(SPA, HYPERVISOR)
+        RMPUpdate(SPA, '0', HYPERVISOR)
     ]->
     [ 
         !SystemPA(SPA),
@@ -84,7 +84,7 @@ rule AssignPageToFW:
         RMPEntry(SPA, HYPERVISOR)
     ]
     --[
-        RMPUpdate(SPA, FIRMWARE)
+        RMPUpdate(SPA, HYPERVISOR, FIRMWARE)
     ]->
     [
         RMPEntry(SPA, FIRMWARE)
@@ -98,7 +98,7 @@ rule AssignPageToGVM:
         Fr(GPA)
     ]
     --[
-        RMPUpdate(SPA, GUEST(GID, GPA, INVALID))
+        RMPUpdate(SPA, HYPERVISOR, GUEST(GID, GPA, INVALID))
     ]->
     [
         RMPEntry(SPA, GUEST(GID, GPA, INVALID))
@@ -110,7 +110,7 @@ rule ReturnPageFromGVM:
         RMPEntry(SPA, GUEST(GID, GPA, isValid))
     ]
     --[
-        RMPUpdate(SPA, HYPERVISOR)
+        RMPUpdate(SPA, GUEST(GID, GPA, isValid), HYPERVISOR)
     ]->
     [
         RMPEntry(SPA, HYPERVISOR)
@@ -122,7 +122,7 @@ rule ReturnPageFromFW:
         RMPEntry(SPA, FIRMWARE)
     ]
     --[
-        RMPUpdate(SPA, HYPERVISOR)
+        RMPUpdate(SPA, FIRMWARE, HYPERVISOR)
     ]->
     [
         RMPEntry(SPA, HYPERVISOR)
@@ -135,7 +135,7 @@ rule GuestValidate:
         RMPEntry(SPA, GUEST(GID, GPA, INVALID))
     ]
     --[
-        RMPUpdate(SPA, GUEST(GID, GPA, VALID))
+        RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID))
     ]->
     [
         RMPEntry(SPA, GUEST(GID, GPA, VALID))
@@ -175,25 +175,25 @@ rule ReadFromPage:
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
-    Ex SPA GID GPA isValid #i #j. 
-    RMPUpdate(SPA, FIRMWARE) @ i 
-    & RMPUpdate(SPA, GUEST(GID, GPA, isValid)) @ j
+    Ex SPA owner1 owner2 GID GPA isValid #i #j. 
+    RMPUpdate(SPA, owner1, FIRMWARE) @ i 
+    & RMPUpdate(SPA, owner2, GUEST(GID, GPA, isValid)) @ j
     & (#i < #j)
 "
 
 lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
 "
-    Ex SPA GID GPA1 GPA2 isValid1 isValid2 #i #j. 
-    RMPUpdate(SPA, GUEST(GID, GPA1, isValid1)) @ i
-    & RMPUpdate(SPA, GUEST(GID, GPA2, isValid2)) @ j
+    Ex SPA owner1 owner2 GID GPA1 GPA2 isValid1 isValid2 #i #j. 
+    RMPUpdate(SPA, owner1, GUEST(GID, GPA1, isValid1)) @ i
+    & RMPUpdate(SPA, owner2, GUEST(GID, GPA2, isValid2)) @ j
     & (#i < #j)
 "
 
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
 "
-    Ex SPA GID GPA #i #j. 
-    RMPUpdate(SPA, GUEST(GID, GPA, INVALID)) @ i
-    & RMPUpdate(SPA, GUEST(GID, GPA, VALID)) @ j
+    Ex SPA owner GID GPA #i #j. 
+    RMPUpdate(SPA, owner, GUEST(GID, GPA, INVALID)) @ i
+    & RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID)) @ j
     & (#i < #j)
 "
 
@@ -208,35 +208,39 @@ lemma ExePageCanBeReadAfterWrite: exists-trace
 lemma ExeGuestCanWriteAfterValidation: exists-trace
 "
     Ex SPA GID GPA content #i #j. 
-    RMPUpdate(SPA, GUEST(GID, GPA, VALID)) @ i 
+    RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID)) @ i 
     & Write(SPA, GUEST(GID, GPA, VALID), content) @ j 
     & (#i < #j)
+"
+
+lemma PageCannotBeTransferredToSameOwner:
+"
+    All SPA owner #i. 
+    RMPUpdate(SPA, owner, owner) @ i 
+    ==> (#i < #i)
 "
 
 lemma OnlyOwnerCanWriteToPage:
 "
     All SPA owner content #i. 
     Write(SPA, owner, content) @ i 
-    ==> Ex #j. (RMPUpdate(SPA, owner) @ j 
+    ==> Ex prevOwner #j. (RMPUpdate(SPA, prevOwner, owner) @ j 
         & (#j < #i)
-        & not (Ex newOwner #k. RMPUpdate(SPA, newOwner) @ k 
-            & not (owner = newOwner)
+        & not (Ex newOwner #k. RMPUpdate(SPA, owner, newOwner) @ k
             & (#j < #k) 
             & (#k < #i)))
 "
 
 lemma SPAMapsToUniqueGPA:
 "
-    All SPA GPA1 GPA2 GID val1 val2 #i #j. 
-    ((RMPUpdate(SPA, GUEST(GID, GPA1, val1)) @ i 
-    & RMPUpdate(SPA, GUEST(GID, GPA2, val2)) @ j 
+    All SPA owner1 owner2 GPA1 GPA2 GID val1 val2 #i #j. 
+    ((RMPUpdate(SPA, owner1, GUEST(GID, GPA1, val1)) @ i 
+    & RMPUpdate(SPA, owner2, GUEST(GID, GPA2, val2)) @ j 
     & #i < #j) 
     ==> GPA1 = GPA2 
-        | (Ex newOwner #k. RMPUpdate(SPA, newOwner) @ k 
-            & not (newOwner = GUEST(GID, GPA1, val1))
-            & not (newOwner = GUEST(GID, GPA2, val2))
-            & #i < #k 
-            & #k < #j))
+        | (Ex newOwner #k. RMPUpdate(SPA, GUEST(GID, GPA1, val1), newOwner) @ k
+            & (#i < #k) 
+            & (#k < #j)))
 "
 
 end
