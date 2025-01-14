@@ -1,23 +1,25 @@
 theory SEV_SNP_MEMORY begin
 
-builtins: symmetric-encryption
+builtins: symmetric-encryption, natural-numbers
 
-functions:
-    HYPERVISOR/0,
-    FIRMWARE/0,
-    GUEST/3,
-    VALID/0,
-    INVALID/0,
-    owner/1,
-    gpa/1,
-    validated/1
+// functions:
+//     HYPERVISOR/0,
+//     FIRMWARE/0,
+//     GUEST/3,
+//     VALID/0,
+//     INVALID/0,
+//     owner/1,
+//     gpa/1,
+//     validated/1
 
-equations:
-    owner(HYPERVISOR) = HYPERVISOR,
-    owner(FIRMWARE) = FIRMWARE,
-    owner(GUEST(x,y,z)) = x,
-    gpa(GUEST(x,y,z)) = y,
-    validated(GUEST(x,y,z)) = z
+// equations:
+//     owner(HYPERVISOR) = HYPERVISOR,
+//     owner(FIRMWARE) = FIRMWARE,
+//     owner(GUEST(x,y,z)) = x,
+//     gpa(GUEST(x,y,z)) = y,
+//     validated(GUEST(x,y,z)) = z
+
+// RMPEntry(SPA, assigned, pageSize, immutable, GPA, ASID, validated)
 
 rule InitializePage:
     [
@@ -25,23 +27,22 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(SPA, '0', HYPERVISOR)
+        PageInit(SPA, <'0', '0', '0', '0', '0', '0'>),
     ]->
-    [ 
-        !SystemPA(SPA),
-        RMPEntry(SPA, HYPERVISOR),
+    [
+        RMPEntry(SPA, '0', '0', '0', '0', '0', '0'),
         PageContent(SPA, '0')
     ]
 
 rule InitializeGuest:
     [ 
-        Fr(GID)
+        Fr(ASID)
     ]
     --[ 
-        InitializeGuest(GID)
+        InitializeGuest(ASID)
     ]->
     [ 
-        !GuestID(GID)
+        !GuestID(ASID)
     ]
 
 rule GenerateHypervisorLtk:
@@ -52,7 +53,7 @@ rule GenerateHypervisorLtk:
         GenerateHypervisorLtk(ltk)
     ]->
     [
-        !Ltk(ltk, HYPERVISOR)
+        !Ltk(ltk, 'HYPERVISOR')
     ]
 
 rule GenerateFirmwareLtk:
@@ -63,182 +64,227 @@ rule GenerateFirmwareLtk:
         GenerateFirmwareLtk(ltk)
     ]->
     [
-        !Ltk(ltk, FIRMWARE)
+        !Ltk(ltk, 'FIRMWARE')
     ]
 
 rule GenerateGuestLtk:
     [
         Fr(ltk),
-        !GuestID(GID)
+        !GuestID(ASID)
     ]
     --[
-        GenerateGuestLtk(ltk, GID)
+        GenerateGuestLtk(ltk, ASID)
     ]->
     [
-        !Ltk(ltk, GID)
+        !Ltk(ltk, ASID)
     ]
 
 rule AssignPageToFW:
     [
-        !SystemPA(SPA),
-        RMPEntry(SPA, HYPERVISOR)
+        RMPEntry(SPA, '0', pageSize, immutable, '0', '0', '0')
     ]
     --[
-        RMPUpdate(SPA, HYPERVISOR, FIRMWARE)
+        RMPUpdate(SPA, <'1', pageSize, '1', '0', '0', '0'>)
     ]->
     [
-        RMPEntry(SPA, FIRMWARE)
+        RMPEntry(SPA, '1', pageSize, '1', '0', '0', '0')
     ]
 
 rule AssignPageToGVM:
     [
-        !SystemPA(SPA),
-        RMPEntry(SPA, HYPERVISOR),
-        !GuestID(GID),
+        RMPEntry(SPA, '0', pageSize, immutable, '0', '0', '0'),
+        !GuestID(ASID),
         Fr(GPA)
     ]
     --[
-        RMPUpdate(SPA, HYPERVISOR, GUEST(GID, GPA, INVALID))
+        RMPUpdate(SPA, <'1', pageSize, '0', GPA, ASID, '0'>)
     ]->
     [
-        RMPEntry(SPA, GUEST(GID, GPA, INVALID))
+        RMPEntry(SPA, '1', pageSize, '0', GPA, ASID, '0')
     ]
 
 rule ReturnPageFromGVM:
     [
-        !SystemPA(SPA),
-        RMPEntry(SPA, GUEST(GID, GPA, isValid))
+        !GuestID(ASID),
+        RMPEntry(SPA, '1', pageSize, '0', GPA, ASID, validated)
     ]
     --[
-        RMPUpdate(SPA, GUEST(GID, GPA, isValid), HYPERVISOR)
+        RMPUpdate(SPA, <'0', pageSize, '0', '0', '0', '0'>)
     ]->
     [
-        RMPEntry(SPA, HYPERVISOR)
+        RMPEntry(SPA, '0', pageSize, '0', '0', '0', '0')
     ]
 
 rule ReturnPageFromFW:
     [
-        !SystemPA(SPA),
-        RMPEntry(SPA, FIRMWARE)
+        RMPEntry(SPA, '1', pageSize, '0', '0', '0', '0')
     ]
     --[
-        RMPUpdate(SPA, FIRMWARE, HYPERVISOR)
+        RMPUpdate(SPA, <'0', pageSize, '0', '0', '0', '0'>)
     ]->
     [
-        RMPEntry(SPA, HYPERVISOR)
+        RMPEntry(SPA, '0', pageSize, '0', '0', '0', '0')
+    ]
+
+rule PageSmash:
+    [
+        !GuestID(ASID),
+        RMPEntry(SPA, '1', '1', '0', GPA, ASID, '1')
+    ]
+    --[
+        PSmash(SPA, <'1', '0', '0', GPA, ASID, '1'>)
+    ]->
+    [
+        RMPEntry(SPA, '1', '0', '0', GPA, ASID, '1'),
+        RMPEntry(SPA %+ 1, '1', '0', '0', GPA %+ 1, ASID, '1')
+    ]
+
+rule PageMerge:
+    [
+        RMPEntry(SPA, '0', '0', '0', '0', '0', '0'),
+        RMPEntry(SPA %+ 1, '0', '0', '0', '0', '0', '0')
+    ]
+    --[
+        PMerge(SPA, <'0', '1', '0', '0', '0', '0'>)
+    ]->
+    [
+        RMPEntry(SPA, '0', '1', '0', '0', '0', '0')
     ]
 
 rule GuestValidate:
     [
-        !SystemPA(SPA),
-        !GuestID(GID),
-        RMPEntry(SPA, GUEST(GID, GPA, INVALID))
+        !GuestID(ASID),
+        RMPEntry(SPA, '1', pageSize, '0', GPA, ASID, '0')
     ]
     --[
-        RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID))
+        PValidate(SPA, <'1', pageSize, '0', GPA, ASID, '1'>)
     ]->
     [
-        RMPEntry(SPA, GUEST(GID, GPA, VALID))
+        RMPEntry(SPA, '1', pageSize, '0', GPA, ASID, '1')
     ]
 
-rule WriteToPage:
-    [
-        !SystemPA(SPA),
-        !Ltk(ltk, owner(owner)),
-        RMPEntry(SPA, owner),
-        In(newContentEncrypted),
-        PageContent(SPA, oldContent)
-    ]
-    --[
-        Write(SPA, owner, sdec(<ltk, SPA>, newContentEncrypted))
-    ]->
-    [
-        RMPEntry(SPA, owner),
-        PageContent(SPA, sdec(<ltk, SPA>, newContentEncrypted))
-    ]
+// rule WriteToPage:
+//     [
+//         !SystemPA(SPA),
+//         !Ltk(ltk, owner(owner)),
+//         RMPEntry(SPA, owner),
+//         In(newContentEncrypted),
+//         PageContent(SPA, oldContent)
+//     ]
+//     --[
+//         Write(SPA, owner, sdec(<ltk, SPA>, newContentEncrypted))
+//     ]->
+//     [
+//         RMPEntry(SPA, owner),
+//         PageContent(SPA, sdec(<ltk, SPA>, newContentEncrypted))
+//     ]
 
-rule ReadFromPage:
-    [ 
-        !SystemPA(SPA),
-        !Ltk(ltk, owner(owner)),
-        RMPEntry(SPA, owner),
-        PageContent(SPA, content)
-    ]
-    --[
-        Read(SPA, owner, content)
-    ]->
-    [
-        RMPEntry(SPA, owner),
-        PageContent(SPA, content),
-        Out(senc(<ltk, SPA>, content))
-    ]
+// rule ReadFromPage:
+//     [ 
+//         !SystemPA(SPA),
+//         !Ltk(ltk, owner(owner)),
+//         RMPEntry(SPA, owner),
+//         PageContent(SPA, content)
+//     ]
+//     --[
+//         Read(SPA, owner, content)
+//     ]->
+//     [
+//         RMPEntry(SPA, owner),
+//         PageContent(SPA, content),
+//         Out(senc(<ltk, SPA>, content))
+//     ]
+
+// RMPUpdate(SPA, <assigned, pageSize, immutable, GPA, ASID, validated>)
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
-    Ex SPA owner1 owner2 GID GPA isValid #i #j. 
-    RMPUpdate(SPA, owner1, FIRMWARE) @ i 
-    & RMPUpdate(SPA, owner2, GUEST(GID, GPA, isValid)) @ j
+    Ex SPA pageSize immutable GPA ASID validated #i #j. 
+    RMPUpdate(SPA, <'1', pageSize, immutable, '0', '0', '0'>) @ i 
+    & RMPUpdate(SPA, <'1', pageSize, '0', GPA, ASID, validated>) @ j
+    & (#i < #j)
+"
+
+lemma ExePageCanGoFromGVMToFW: exists-trace
+"
+    Ex SPA pageSize immutable GPA ASID validated #i #j. 
+    RMPUpdate(SPA, <'1', pageSize, '0', GPA, ASID, validated>) @ i 
+    & RMPUpdate(SPA, <'1', pageSize, immutable, '0', '0', '0'>) @ j
     & (#i < #j)
 "
 
 lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
 "
-    Ex SPA owner1 owner2 GID GPA1 GPA2 isValid1 isValid2 #i #j. 
-    RMPUpdate(SPA, owner1, GUEST(GID, GPA1, isValid1)) @ i
-    & RMPUpdate(SPA, owner2, GUEST(GID, GPA2, isValid2)) @ j
+    Ex SPA pageSize ASID GPA1 GPA2 validated1 validated2 #i #j. 
+    RMPUpdate(SPA, <'1', pageSize, '0', GPA1, ASID, validated1>) @ i
+    & RMPUpdate(SPA, <'1', pageSize, '0', GPA2, ASID, validated2>) @ j
     & (#i < #j)
 "
 
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
 "
-    Ex SPA owner GID GPA #i #j. 
-    RMPUpdate(SPA, owner, GUEST(GID, GPA, INVALID)) @ i
-    & RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID)) @ j
+    Ex SPA pageSize GPA ASID #i #j. 
+    RMPUpdate(SPA, <'1', pageSize, '0', GPA, ASID, '0'>) @ i
+    & PValidate(SPA, <'1', pageSize, '0', GPA, ASID, '1'>) @ j
     & (#i < #j)
 "
 
-lemma ExePageCanBeReadAfterWrite: exists-trace
+lemma ExePageCanBeSmashedAfterMerge: exists-trace
 "
-    Ex SPA owner1 owner2 content #i #j. 
-    Write(SPA, owner1, content) @ i 
-    & Read(SPA, owner2, content) @ j 
-    & (#i < #j)
+    Ex SPA entry GPA ASID #i #j #k. 
+    PMerge(SPA, <'0', '1', '0', '0', '0', '0'>) @ i
+    & RMPUpdate(SPA %+ 1, entry) @ j
+    & PSmash(SPA, <'1', '0', '0', GPA, ASID, '1'>) @ k
+    & (#i < #j) & (#j < #k)
 "
 
-lemma ExeGuestCanWriteAfterValidation: exists-trace
-"
-    Ex SPA GID GPA content #i #j. 
-    RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID)) @ i 
-    & Write(SPA, GUEST(GID, GPA, VALID), content) @ j 
-    & (#i < #j)
-"
+// lemma ExePageCanBeReadAfterWrite: exists-trace
+// "
+//     Ex SPA owner1 owner2 content #i #j. 
+//     Write(SPA, owner1, content) @ i 
+//     & Read(SPA, owner2, content) @ j 
+//     & (#i < #j)
+// "
+
+// lemma ExeGuestCanWriteAfterValidation: exists-trace
+// "
+//     Ex SPA GID GPA content #i #j. 
+//     RMPUpdate(SPA, GUEST(GID, GPA, INVALID), GUEST(GID, GPA, VALID)) @ i 
+//     & Write(SPA, GUEST(GID, GPA, VALID), content) @ j 
+//     & (#i < #j)
+// "
 
 lemma PageCannotBeTransferredToSameOwner:
 "
-    All SPA owner #i. 
-    RMPUpdate(SPA, owner, owner) @ i 
-    ==> (#i < #i)
+    All SPA entry1 #i #j. 
+    RMPUpdate(SPA, entry1) @ i
+    & RMPUpdate(SPA, entry1) @ j
+    & (#i < #j)
+    ==> Ex entry2 #k. 
+        RMPUpdate(SPA, entry2) @ k
+        & (#i < #k) 
+        & (#k < #j)
 "
 
-lemma OnlyOwnerCanWriteToPage:
-"
-    All SPA owner content #i. 
-    Write(SPA, owner, content) @ i 
-    ==> Ex prevOwner #j. (RMPUpdate(SPA, prevOwner, owner) @ j 
-        & (#j < #i)
-        & not (Ex newOwner #k. RMPUpdate(SPA, owner, newOwner) @ k
-            & (#j < #k) 
-            & (#k < #i)))
-"
+// lemma OnlyOwnerCanWriteToPage:
+// "
+//     All SPA owner content #i. 
+//     Write(SPA, owner, content) @ i 
+//     ==> Ex prevOwner #j. (RMPUpdate(SPA, prevOwner, owner) @ j 
+//         & (#j < #i)
+//         & not (Ex newOwner #k. RMPUpdate(SPA, owner, newOwner) @ k
+//             & (#j < #k) 
+//             & (#k < #i)))
+// "
 
 lemma SPAMapsToUniqueGPA:
 "
-    All SPA owner1 owner2 GPA1 GPA2 GID val1 val2 #i #j. 
-    ((RMPUpdate(SPA, owner1, GUEST(GID, GPA1, val1)) @ i 
-    & RMPUpdate(SPA, owner2, GUEST(GID, GPA2, val2)) @ j 
+    All SPA GPA1 GPA2 ASID validated1 validated2 #i #j. 
+    ((RMPUpdate(SPA, <'1', pageSize, '0', GPA1, ASID, validated1>) @ i 
+    & RMPUpdate(SPA, <'1', pageSize, '0', GPA2, ASID, validated2>) @ j 
     & #i < #j) 
     ==> GPA1 = GPA2 
-        | (Ex newOwner #k. RMPUpdate(SPA, GUEST(GID, GPA1, val1), newOwner) @ k
+        | (Ex #k. RMPUpdate(SPA, <'0', pageSize, '0', '0', '0', '0'>) @ k
             & (#i < #k) 
             & (#k < #j)))
 "
