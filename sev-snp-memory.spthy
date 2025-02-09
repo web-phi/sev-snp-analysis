@@ -3,40 +3,54 @@ theory SEV_SNP_MEMORY begin
 builtins: symmetric-encryption
 
 functions:
-    HYPERVISOR/0,
-    FIRMWARE/0,
-    GUEST/3,
-    VALID/0,
-    INVALID/0,
-    owner/1,
-    gpa/1,
-    validated/1
-
-equations:
-    owner(HYPERVISOR) = HYPERVISOR,
-    owner(FIRMWARE) = FIRMWARE,
-    owner(GUEST(x,y,z)) = x,
-    gpa(GUEST(x,y,z)) = y,
-    validated(GUEST(x,y,z)) = z
+    comp/2
 
 restriction PointerCanBeDroppedOnlyOnce:
 " 
-    All row #i #j. (Drop(row) @ i & Drop(row) @ j ==> (#i = #j))
+    All row #i #j. 
+    Drop(row) @ i 
+    & Drop(row) @ j ==> 
+        #i = #j
 "
 
 restriction DroppedPointerCannotBeRead:
 "
-    All row SPA owner content #i #j. Read(row, SPA, owner, content) @ i & Drop(row) @ j ==> (#i < #j)
+    All row SPA owner ASID GPA content #i #j. 
+    Load(row, SPA, owner, ASID, GPA, content) @ i 
+    & Drop(row) @ j ==> 
+        #i < #j
 "
 
 restriction DroppedPointerCannotBeWritten:
 "
-    All row SPA owner content #i #j. Write(row, SPA, owner, content) @ i & Drop(row) @ j ==> (#i < #j)
+    All row SPA owner ASID GPA content #i #j. 
+    Write(row, SPA, owner, ASID, GPA, content) @ i
+    & Drop(row) @ j ==> 
+        #i < #j
 "
 
 restriction DroppedPointerCannotBeUpdated:
 "
-    All row SPA owner #i #j. RMPUpdate(row, SPA, owner) @ i & Drop(row) @ j ==> (#i < #j)
+    All row SPA owner ASID GPA isValid #i #j. 
+    RMPUpdate(row, SPA, owner, ASID, GPA, isValid) @ i 
+    & Drop(row) @ j ==> 
+        #i < #j
+"
+
+restriction InstructionRegisterCanBeInitializedOnlyOnce:
+"
+    All #i #j.
+    InitializeInstructionRegister() @ i
+    & InitializeInstructionRegister() @ j ==>
+        #i = #j
+"
+
+restriction DataRegisterCanBeInitializedOnlyOnce:
+"
+    All #i #j.
+    InitializeDataRegister() @ i
+    & InitializeDataRegister() @ j ==>
+        #i = #j
 "
 
 rule InitializePage:
@@ -46,34 +60,45 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(row, SPA, HYPERVISOR)
+        RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]->
     [ 
         !SystemPA(SPA),
-        !RMPEntry(row, SPA, HYPERVISOR),
-        PageContent(SPA, '0')
+        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, 'NULL DATA')
     ]
 
 rule InitializeGuest:
     [ 
-        Fr(GID)
+        Fr(ASID)
     ]
     --[ 
-        InitializeGuest(GID)
+        InitializeGuest(ASID)
     ]->
     [ 
-        !GuestID(GID)
+        !GuestID(ASID)
     ]
 
-rule GenerateHypervisorLtk:
+rule InitializeInstructionRegister:
     [
-        Fr(ltk)
+        !FirmwareLtk(ltkFW)
     ]
     --[
-        GenerateHypervisorLtk(ltk)
+        InitializeInstructionRegister()
     ]->
     [
-        !Ltk(ltk, HYPERVISOR)
+        InstructionRegister(senc(ltkFW, 'NOP'))
+    ]
+
+rule InitializeDataRegister:
+    [
+        !FirmwareLtk(ltkFW)
+    ]
+    --[
+        InitializeDataRegister()
+    ]->
+    [
+        DataRegister(senc(ltkFW, 'NULL DATA'))
     ]
 
 rule GenerateFirmwareLtk:
@@ -84,181 +109,346 @@ rule GenerateFirmwareLtk:
         GenerateFirmwareLtk(ltk)
     ]->
     [
-        !Ltk(ltk, FIRMWARE)
+        !FirmwareLtk(ltk)
     ]
 
 rule GenerateGuestLtk:
     [
         Fr(ltk),
-        !GuestID(GID)
+        !GuestID(ASID)
     ]
     --[
-        GenerateGuestLtk(ltk, GID)
+        GenerateGuestLtk(ltk, ASID)
     ]->
     [
-        !Ltk(ltk, GID)
+        !GuestLtk(ltk, ASID)
+    ]
+
+rule CompromiseFirmwareLtk:
+    [ 
+        !FirmwareLtk(ltk)
+    ]
+    --[ 
+        CompromiseFirmwareLtk(ltk)
+    ]->
+    [ 
+        Out(ltk)
+    ]
+
+rule CompromiseGuestLtk:
+    [ 
+        !GuestLtk(ltk, ASID)
+    ]
+    --[ 
+        CompromiseGuestLtk(ltk, ASID)
+    ]->
+    [ 
+        Out(ltk)
     ]
 
 rule AssignPageToFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(row1, SPA, HYPERVISOR),
-        Fr(row2)
+        !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        Fr(row2),
+
     ]
     --[
-        RMPUpdate(row2, SPA, FIRMWARE),
+        RMPUpdate(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, FIRMWARE)
+        !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule AssignPageToGVM:
     [
         !SystemPA(SPA),
-        !RMPEntry(row1, SPA, HYPERVISOR),
-        !GuestID(GID),
+        !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        !GuestID(ASID),
         Fr(GPA),
         Fr(row2)
     ]
     --[
-        RMPUpdate(row2, SPA, GUEST(GID, GPA, INVALID)),
+        RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, GUEST(GID, GPA, INVALID))
+        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID')
     ]
 
 rule ReturnPageFromGVM:
     [
         !SystemPA(SPA),
-        !RMPEntry(row1, SPA, GUEST(GID, GPA, isValid)),
+        !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, isValid),
         Fr(row2)
     ]
     --[
-        RMPUpdate(row2, SPA, HYPERVISOR),
+        RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, HYPERVISOR)
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule ReturnPageFromFW:
     [
         !SystemPA(SPA),
-        !RMPEntry(row1, SPA, FIRMWARE),
+        !RMPEntry(row1, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         Fr(row2)
     ]
     --[
-        RMPUpdate(row2, SPA, HYPERVISOR),
+        RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, HYPERVISOR)
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule GuestValidate:
     [
         !SystemPA(SPA),
-        !GuestID(GID),
-        !RMPEntry(row1, SPA, GUEST(GID, GPA, INVALID)),
+        !GuestID(ASID),
+        !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, 'INVALID'),
         Fr(row2)
     ]
     --[
-        RMPUpdate(row2, SPA, GUEST(GID, GPA, VALID)),
+        RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'VALID'),
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, GUEST(GID, GPA, VALID))
+        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'VALID')
     ]
 
-rule WriteToPage:
+rule ClearInstructionRegister:
+    [
+        !FirmwareLtk(ltkFW),
+        InstructionRegister(senc(ltkFW, oldInstruction))
+    ]
+    --[
+        ClearInstructionRegister(oldInstruction)
+    ]->
+    [
+        InstructionRegister(senc(ltkFW, 'NOP'))
+    ]
+
+rule ClearDataRegister:
+    [
+        !FirmwareLtk(ltkFW),
+        DataRegister(senc(ltkFW, oldData))
+    ]
+    --[
+        ClearDataRegister(oldData)
+    ]->
+    [
+        DataRegister(senc(ltkFW, 'NULL DATA'))
+    ]
+
+rule LoadInstructionFromGuestPage:
     [
         !SystemPA(SPA),
-        !RMPEntry(row, SPA, owner),
-        !Ltk(ltk, owner(owner)),
+        !RMPEntry(row, SPA, 'GUEST', ASID, GPA, 'VALID'),
+        !GuestLtk(ltk, ASID),
+        !FirmwareLtk(ltkFW),
+        PageContent(SPA, senc(<ltk, SPA>, instruction)),
+        InstructionRegister(senc(ltkFW, 'NOP'))
+    ]
+    --[
+        LoadInstruction(row, SPA, 'GUEST', ASID, GPA, instruction)
+    ]->
+    [
+        PageContent(SPA, senc(<ltk, SPA>, instruction)),
+        InstructionRegister(senc(ltkFW, instruction))
+    ]
+
+rule LoadDataFromGuestPage:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'GUEST', ASID, GPA, 'VALID'),
+        !GuestLtk(ltk, ASID),
+        !FirmwareLtk(ltkFW),
+        PageContent(SPA, senc(<ltk, SPA>, data)),
+        DataRegister(senc(ltkFW, oldData))
+    ]
+    --[
+        LoadData(row, SPA, 'GUEST', ASID, GPA, data)
+    ]->
+    [
+        PageContent(SPA, senc(<ltk, SPA>, data)),
+        DataRegister(senc(ltkFW, <oldData, data>))
+    ]
+
+rule WriteToGuestPage:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'GUEST', ASID, GPA, 'VALID'),
+        !GuestLtk(ltk, ASID),
+        !FirmwareLtk(ltkFW)
+        PageContent(SPA, senc(<ltk, SPA>, oldData)),
+        InstructionRegister(senc(ltkFW, instruction)),
+        DataRegister(senc(ltkFW, data))
+    ]
+    --[
+        Write(row, SPA, 'GUEST', ASID, GPA, comp(instruction, data))
+    ]->
+    [
+        PageContent(SPA, senc(<ltk, SPA>, comp(instruction, data))),
+        Out(senc(<ltk, SPA>, comp(instruction, data)))
+    ]
+
+rule LoadFromHypervisorPage:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, content)
+    ]
+    --[
+        Load(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', content)
+    ]->
+    [
+        PageContent(SPA, content),
+        Out(content)
+    ]
+    
+rule WriteToHypervisorPage:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        In(newContent),
+        PageContent(SPA, oldContent)
+    ]
+    --[
+        Write(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', newContent)
+    ]->
+    [
+        PageContent(SPA, newContent)
+    ]
+
+rule LoadFromFirmwarePage:
+    [ 
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        !FirmwareLtk(ltk),
+        PageContent(SPA, content)
+    ]
+    --[
+        Load(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', sdec(<ltk, SPA>, content))
+    ]->
+    [
+        PageContent(SPA, content),
+        Out(content)
+    ]
+
+rule WriteToFirmwarePage:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        !FirmwareLtk(ltk),
         In(newContentEncrypted),
         PageContent(SPA, oldContent)
     ]
     --[
-        Write(row, SPA, owner, sdec(<ltk, SPA>, newContentEncrypted))
+        Write(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', sdec(<ltk, SPA>, newContentEncrypted))
     ]->
     [
-        PageContent(SPA, sdec(<ltk, SPA>, newContentEncrypted))
+        PageContent(SPA, newContentEncrypted)
     ]
 
-rule ReadFromPage:
-    [ 
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, owner),
-        !Ltk(ltk, owner(owner)),
-        PageContent(SPA, content)
-    ]
-    --[
-        Read(row, SPA, owner, content)
-    ]->
-    [
-        PageContent(SPA, content),
-        Out(senc(<ltk, SPA>, content))
-    ]
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
-    Ex row1 row2 SPA GID GPA isValid #i #j #k. 
-    RMPUpdate(row1, SPA, FIRMWARE) @ i 
-    & RMPUpdate(row2, SPA, GUEST(GID, GPA, isValid)) @ k 
-    & Drop(row1) @ j & not (Ex #l. Drop(row2) @ l & (#j < #l) & (#l < #k))
-    & (#i < #j) & (#j < #k)
+    Ex row1 row2 SPA ASID GPA isValid #i #j #k. 
+    RMPUpdate(row1, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID') @ i 
+    & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, isValid) @ k 
+    & Drop(row1) @ j 
+    & not (Ex #l. 
+        Drop(row2) @ l 
+        & (#j < #l) 
+        & (#l < #k))
+    & (#i < #j) 
+    & (#j < #k)
 "
 
 lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
 "
-    Ex row1 row2 SPA GID GPA1 GPA2 isValid1 isValid2 #i #j #k. 
-    RMPUpdate(row1, SPA, GUEST(GID, GPA1, isValid1)) @ i
-    & RMPUpdate(row2, SPA, GUEST(GID, GPA2, isValid2)) @ k 
-    & Drop(row1) @ j & not (Ex #l. Drop(row2) @ l & (#j < #l) & (#l < #k))
+    Ex row1 row2 SPA ASID GPA1 GPA2 isValid1 isValid2 #i #j #k. 
+    RMPUpdate(row1, SPA, 'GUEST', ASID, GPA1, isValid1) @ i
+    & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA2, isValid2) @ k 
+    & Drop(row1) @ j 
+    & not (Ex #l. 
+        Drop(row2) @ l 
+        & (#j < #l) 
+        & (#l < #k))
+    & (#i < #j) 
+    & (#j < #k)
+"
+
+lemma ExePageCanGoFromGVMToFW: exists-trace
+"
+    Ex row1 row2 SPA ASID GPA isValid #i #j #k. 
+    RMPUpdate(row1, SPA, 'GUEST', ASID, GPA, isValid) @ i 
+    & RMPUpdate(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID') @ k 
+    & Drop(row1) @ j 
+    & not (Ex #l. 
+        Drop(row2) @ l 
+        & (#j < #l) 
+        & (#l < #k))
     & (#i < #j) & (#j < #k)
 "
 
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
 "
-    Ex row1 row2 SPA GID GPA #i #j #k. 
-    RMPUpdate(row1, SPA, GUEST(GID, GPA, INVALID)) @ i
-    & RMPUpdate(row2, SPA, GUEST(GID, GPA, VALID)) @ k 
+    Ex row1 row2 SPA ASID GPA #i #j #k. 
+    RMPUpdate(row1, SPA, 'GUEST', ASID, GPA, 'INVALID') @ i
+    & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'VALID') @ k 
     & Drop(row1) @ j
-    & (#i < #j) & (#j < #k | #j = #k)
+    & (#i < #j) 
+    & (#j < #k | #j = #k)
 "
 
 lemma ExePageCanBeReadAfterWrite: exists-trace
 "
-    Ex row1 row2 SPA owner1 owner2 content #i #j. 
-    Write(row1, SPA, owner1, content) @ i 
-    & Read(row2, SPA, owner2, content) @ j 
+    Ex row1 row2 SPA owner1 owner2 ASID1 ASID2 GPA1 GPA2 content #i #j. 
+    Write(row1, SPA, owner1, ASID1, GPA1, content) @ i 
+    & Load(row2, SPA, owner2, ASID2, GPA2, content) @ j 
     & (#i < #j)
-    & not (Ex rowOther ownerOther #k. Read(rowOther, SPA, ownerOther, content) @ k & (#i < #k) & (#k < #j))
+    // & not (Ex rowOther ownerOther #k. 
+    //     Load(rowOther, SPA, ownerOther, content) @ k 
+    //     & (#i < #k) & (#k < #j))
 "
 
 lemma ExeGuestCanWriteAfterValidation: exists-trace
 "
-    Ex row1 row2 SPA GID GPA content #i #j. RMPUpdate(row1, SPA, GUEST(GID, GPA, VALID)) @ i &
-    Write(row2, SPA, GUEST(GID, GPA, VALID), content) @ j & (#i < #j)
+    Ex row1 row2 SPA ASID GPA content #i #j. 
+    RMPUpdate(row1, SPA, 'GUEST', ASID, GPA, 'VALID') @ i 
+    & Write(row2, SPA, 'GUEST', ASID, GPA, content) @ j 
+    & (#i < #j)
 "
 
 lemma OnlyOwnerCanWriteToPage:
 "
-    All row1 SPA currentOwner content #i. Write(row1, SPA, currentOwner, content) @ i ==>
-    Ex row2 #j. (RMPUpdate(row2, SPA, currentOwner) @ j & (#j < #i)
-    & not (Ex #k. Drop(row2) @ k & (#j < #k) & (#k < #i)))
+    All row1 SPA owner ASID GPA content #i. 
+    Write(row1, SPA, owner, ASID, GPA, content) @ i ==>
+        Ex row2 isValid #j. 
+            (RMPUpdate(row2, SPA, owner, ASID, GPA, isValid) @ j 
+            & (#j < #i)
+            & not (Ex #k. 
+                Drop(row2) @ k 
+                & (#j < #k) 
+                & (#k < #i)))
 "
 
 lemma SPAMapsToUniqueGPA:
 "
-    All SPA GPA1 GPA2 GID val1 val2 row1 row2 #i #j. 
-    ((RMPUpdate(row1, SPA, GUEST(GID, GPA1, val1)) @ i 
-    & RMPUpdate(row2, SPA, GUEST(GID, GPA2, val2)) @ j 
-    & #i < #j) ==>
-    GPA1 = GPA2 
-    | (Ex #k. Drop(row1) @ k & #i < #k & #k < #j))
+    All SPA GPA1 GPA2 ASID val1 val2 row1 row2 #i #j. 
+    RMPUpdate(row1, SPA, 'GUEST', ASID, GPA1, val1) @ i 
+    & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA2, val2) @ j 
+    & #i < #j ==>
+        GPA1 = GPA2 
+        | (Ex #k. 
+            Drop(row1) @ k 
+            & #i < #k 
+            & #k < #j)
 "
 
 end
