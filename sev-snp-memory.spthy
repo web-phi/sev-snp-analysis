@@ -47,9 +47,9 @@ restriction DataRegisterCanBeInitializedOnlyOnce:
 
 rule InitializePage:
     [
-        // In(content),
         Fr(SPA),
-        Fr(row)
+        Fr(row),
+        In(initialData)
     ]
     --[ 
         InitializePage(SPA),
@@ -58,7 +58,7 @@ rule InitializePage:
     [ 
         !SystemPA(SPA),
         !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, 'NULL DATA')
+        PageContent(SPA, initialData)
     ]
 
 rule InitializeGuest:
@@ -143,8 +143,8 @@ rule AssignPageToFW:
     [
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        // In(newContent),
-        // PageContent(SPA, oldContent),
+        In(newContent),
+        PageContent(SPA, oldContent),
         Fr(row2)
     ]
     --[
@@ -152,8 +152,8 @@ rule AssignPageToFW:
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID')
-        // PageContent(SPA, newContent)
+        !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, newContent)
     ]
 
 rule AssignPageToGVM:
@@ -161,8 +161,8 @@ rule AssignPageToGVM:
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !GuestID(ASID),
-        // In(newContent),
-        // PageContent(SPA, oldContent),
+        In(newContent),
+        PageContent(SPA, oldContent),
         Fr(GPA),
         Fr(row2)
     ]
@@ -171,8 +171,8 @@ rule AssignPageToGVM:
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID')
-        // PageContent(SPA, newContent)
+        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
+        PageContent(SPA, newContent)
     ]
 
 rule ReturnPageFromGVM:
@@ -459,12 +459,8 @@ lemma ExePageCanGoFromFWToGVM: exists-trace
     Ex row1 row2 SPA ASID GPA isValid #i #j #k. 
     RMPUpdate(row1, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID') @ i 
     & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, isValid) @ k 
-    & Drop(row1) @ j 
-    & not (Ex #l. 
-        Drop(row2) @ l 
-        & (#j < #l) 
-        & (#l < #k))
-    & (#i < #j) 
+    & Drop(row1) @ j
+    & (#i = #j | #i < #j) 
     & (#j < #k)
 "
 
@@ -473,13 +469,9 @@ lemma ExePageCanBeGivenToSameGVMTwice: exists-trace
     Ex row1 row2 SPA ASID GPA1 GPA2 isValid1 isValid2 #i #j #k. 
     RMPUpdate(row1, SPA, 'GUEST', ASID, GPA1, isValid1) @ i
     & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA2, isValid2) @ k 
-    & Drop(row1) @ j 
-    & not (Ex #l. 
-        Drop(row2) @ l 
-        & (#j < #l) 
-        & (#l < #k))
-    & (#i < #j) 
-    & (#j < #k)
+    & Drop(row1) @ j
+    & (#i = #j | #i < #j)
+    & #j < #k
 "
 
 lemma ExePageCanGoFromGVMToFW: exists-trace
@@ -487,12 +479,9 @@ lemma ExePageCanGoFromGVMToFW: exists-trace
     Ex row1 row2 SPA ASID GPA isValid #i #j #k. 
     RMPUpdate(row1, SPA, 'GUEST', ASID, GPA, isValid) @ i 
     & RMPUpdate(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID') @ k 
-    & Drop(row1) @ j 
-    & not (Ex #l. 
-        Drop(row2) @ l 
-        & (#j < #l) 
-        & (#l < #k))
-    & (#i < #j) & (#j < #k)
+    & Drop(row1) @ j
+    & (#i = #j | #i < #j)
+    & #j < #k
 "
 
 lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
@@ -501,8 +490,8 @@ lemma ExeGuestCanValidatePageAfterAssignment: exists-trace
     RMPUpdate(row1, SPA, 'GUEST', ASID, GPA, 'INVALID') @ i
     & RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'VALID') @ k 
     & Drop(row1) @ j
-    & (#i < #j) 
-    & (#j < #k | #j = #k)
+    & #i < #j 
+    & (#j = #k | #j < #k)
 "
 
 lemma ExeGuestCanWriteAfterValidation: exists-trace
