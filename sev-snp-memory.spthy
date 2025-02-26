@@ -53,7 +53,9 @@ rule InitializePage:
     ]
     --[ 
         InitializePage(SPA),
-        RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
+        RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+	AccessMemoryPointer(row, SPA),
+	Write(SPA, 'HYPERVISOR', 'NULL ASID', initialData)
     ]->
     [ 
         !SystemPA(SPA),
@@ -149,7 +151,9 @@ rule AssignPageToFW:
     ]
     --[
         RMPUpdate(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1)
+        Drop(row1),
+	AccessMemoryPointer(row1, SPA),
+	Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent)
     ]->
     [
         !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
@@ -168,7 +172,9 @@ rule AssignPageToGVM:
     ]
     --[
         RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
-        Drop(row1)
+        Drop(row1),
+	AccessMemoryPointer(row1, SPA),
+	Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent)
     ]->
     [
         !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
@@ -184,7 +190,9 @@ rule ReturnPageFromGVM:
     ]
     --[
         RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1)
+        Drop(row1),
+	LoadData(SPA, 'HYPERVISOR', 'NULL ASID', content),
+        AccessMemoryPointer(row2, SPA)
     ]->
     [
         !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
@@ -201,7 +209,9 @@ rule ReturnPageFromFW:
     ]
     --[
         RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1)
+        Drop(row1),
+	LoadData(SPA, 'HYPERVISOR', 'NULL ASID', content),
+        AccessMemoryPointer(row2, SPA)
     ]->
     [
         !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
@@ -453,6 +463,9 @@ rule WriteToFirmwarePage:
         DataRegister(senc(ltkFW, 'NULL DATA'))
     ]
 
+lemma Types[sources]:
+"All SPA owner ASID content #i. LoadData(SPA, owner, ASID, content)@i ==> ((Ex #j. KU(content)@j & #j<#i) | (Ex #j. Write(SPA, owner, ASID, content)@j & #j<#i)) &
+All SPA owner ASID content #i. LoadInstruction(SPA, owner, ASID, content)@i ==> ((Ex #j. KU(content)@j & #j<#i) | (Ex #j. Write(SPA, owner, ASID, content)@j & #j<#i))"
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
