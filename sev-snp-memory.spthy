@@ -54,8 +54,8 @@ rule InitializePage:
     --[ 
         InitializePage(SPA),
         RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-	AccessMemoryPointer(row, SPA),
-	Write(SPA, 'HYPERVISOR', 'NULL ASID', initialData)
+        AccessMemoryPointer(row, SPA),
+        Write(SPA, 'HYPERVISOR', 'NULL ASID', initialData)
     ]->
     [ 
         !SystemPA(SPA),
@@ -141,23 +141,44 @@ rule CompromiseGuestLtk:
         Out(ltk)
     ]
 
+rule CompromiseReadAccess:
+    [
+        !SystemPA(SPA),
+        PageContent(SPA, content)
+    ]
+    --[
+        CompromiseReadAccess(SPA, content)
+    ]->
+    [
+        PageContent(SPA, content),
+        Out(content)
+    ]
+
+rule CompromiseWriteAccess:
+    [
+        !SystemPA(SPA),
+        PageContent(SPA, oldContent),
+        In(newContent)
+    ]
+    --[
+        CompromiseWriteAccess(SPA, newContent)
+    ]->
+    [
+        PageContent(SPA, newContent)
+    ]
+
 rule AssignPageToFW:
     [
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        In(newContent),
-        PageContent(SPA, oldContent),
         Fr(row2)
     ]
     --[
         RMPUpdate(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1),
-	AccessMemoryPointer(row1, SPA),
-	Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent)
+        Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, newContent)
+        !RMPEntry(row2, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule AssignPageToGVM:
@@ -165,58 +186,43 @@ rule AssignPageToGVM:
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !GuestID(ASID),
-        In(newContent),
-        PageContent(SPA, oldContent),
         Fr(GPA),
         Fr(row2)
     ]
     --[
         RMPUpdate(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
-        Drop(row1),
-	AccessMemoryPointer(row1, SPA),
-	Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent)
+        Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID'),
-        PageContent(SPA, newContent)
+        !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'INVALID')
     ]
 
 rule ReturnPageFromGVM:
     [
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, isValid),
-        PageContent(SPA, content),
         Fr(row2)
     ]
     --[
         RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1),
-	LoadData(SPA, 'HYPERVISOR', 'NULL ASID', content),
-        AccessMemoryPointer(row2, SPA)
+        Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, content),
-        Out(content)
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule ReturnPageFromFW:
     [
         !SystemPA(SPA),
         !RMPEntry(row1, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, content),
         Fr(row2)
     ]
     --[
         RMPUpdate(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        Drop(row1),
-	LoadData(SPA, 'HYPERVISOR', 'NULL ASID', content),
-        AccessMemoryPointer(row2, SPA)
+        Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, content),
-        Out(content)
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
     ]
 
 rule GuestValidate:
@@ -232,6 +238,36 @@ rule GuestValidate:
     ]->
     [
         !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'VALID')
+    ]
+
+rule HypervisorPageLeak:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, content)
+    ]
+    --[
+        Read(SPA, 'HYPERVISOR', 'NULL ASID', content),
+        AccessMemoryPointer(row, SPA)
+    ]->
+    [
+        PageContent(SPA, content),
+        Out(content)
+    ]
+
+rule HypervisorPageOverwrite:
+    [
+        !SystemPA(SPA),
+        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, oldContent),
+        In(newContent)
+    ]
+    --[
+        Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent),
+        AccessMemoryPointer(row, SPA)
+    ]->
+    [
+        PageContent(SPA, newContent)
     ]
 
 rule ClearInstructionRegister:
@@ -278,6 +314,7 @@ rule LoadInstructionFromGuestPage:
     ]
     --[
         LoadInstruction(SPA, 'GUEST', ASID, instruction),
+        Read(SPA, 'GUEST', ASID, instruction),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -300,6 +337,7 @@ rule LoadDataFromGuestPage:
     ]
     --[
         LoadData(SPA, 'GUEST', ASID, data),
+        Read(SPA, 'GUEST', ASID, data),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -344,6 +382,7 @@ rule LoadInstructionFromHypervisorPage:
     ]
     --[
         LoadInstruction(SPA, 'HYPERVISOR', 'NULL ASID', instruction),
+        Read(SPA, 'HYPERVISOR', 'NULL ASID', instruction),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -364,6 +403,7 @@ rule LoadDataFromHypervisorPage:
     ]
     --[
         LoadData(SPA, 'HYPERVISOR', 'NULL ASID', data),
+        Read(SPA, 'HYPERVISOR', 'NULL ASID', data),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -409,6 +449,7 @@ rule LoadInstructionFromFirmwarePage:
     ]
     --[
         LoadInstruction(SPA, 'FIRMWARE', 'NULL ASID', instruction),
+        Read(SPA, 'FIRMWARE', 'NULL ASID', instruction),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -430,6 +471,7 @@ rule LoadDataFromFirmwarePage:
     ]
     --[
         LoadData(SPA, 'FIRMWARE', 'NULL ASID', data),
+        Read(SPA, 'FIRMWARE', 'NULL ASID', data),
         AccessMemoryPointer(row, SPA)
     ]->
     [
@@ -464,8 +506,14 @@ rule WriteToFirmwarePage:
     ]
 
 lemma Types[sources]:
-"All SPA owner ASID content #i. LoadData(SPA, owner, ASID, content)@i ==> ((Ex #j. KU(content)@j & #j<#i) | (Ex #j. Write(SPA, owner, ASID, content)@j & #j<#i)) &
-All SPA owner ASID content #i. LoadInstruction(SPA, owner, ASID, content)@i ==> ((Ex #j. KU(content)@j & #j<#i) | (Ex #j. Write(SPA, owner, ASID, content)@j & #j<#i))"
+"
+    All SPA owner ASID content #i. 
+    Read(SPA, owner, ASID, content) @ i ==> 
+        ((Ex #j. KU(content) @ j 
+            & #j < #i) 
+        | (Ex #j. Write(SPA, owner, ASID, content) @ j 
+            & #j < #i))
+"
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
