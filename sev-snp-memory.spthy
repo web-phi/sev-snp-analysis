@@ -332,26 +332,9 @@ rule WriteToHypervisorPage:
     ]->
     [
         PageContent(SPA, data),
-        ProcessorState(TID, data),
-        Out(data)
+        ProcessorState(TID, data)
     ]
 
-lemma Types[sources]:
-"
-    (All SPA owner ASID content #i.
-    Read(SPA, owner, ASID, content) @ i ==>
-        ((Ex #j. KU(content) @ j
-            & #j < #i)
-        | (Ex prevOwner prevASID #j. Write(SPA, prevOwner, prevASID, content) @ j
-            & #j < #i)))
-    &
-    (All SPA owner ASID content #i.
-    Write(SPA, owner, ASID, content) @ i ==>
-        ((Ex #j. KU(content) @ j
-            & #j < #i)
-        | (Ex prevSPA prevOwner prevASID #j. Read(prevSPA, prevOwner, prevASID, content) @ j
-            & #j < #i)))
-"
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
