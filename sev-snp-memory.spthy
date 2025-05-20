@@ -1,6 +1,6 @@
 theory SEV_SNP_MEMORY begin
 
-builtins: symmetric-encryption
+builtins: asymmetric-encryption, symmetric-encryption
 
 restriction PointerCanBeDroppedOnlyOnce:
 "
@@ -65,18 +65,25 @@ rule InitializePage:
     ]
 
 rule InitializeGuest:
+    let
+        GuestImage = adec(GuestImageEncrypted, pk(prKey))
+    in
     [
         Fr(ASID),
-        In(GuestImage),
-        !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID')
+        In(GuestImageEncrypted),
+        !FirmwarePrKey(prKey),
+        !FirmwareLtk(ltk),
+        !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, oldContent)
     ]
     --[
         AccessPointer(row),
-        Write(SPA, 'FIRMWARE', 'NULL ASID', <ASID, GuestImage>),
+        Write(SPA, 'FIRMWARE', 'NULL ASID', senc(<ASID, GuestImage>, ltk)),
         Initialize(ASID)
     ]->
     [
-        !GuestID(ASID)
+        !GuestID(ASID),
+        PageContent(SPA, senc(<ASID, GuestImage>, ltk))
     ]
 
 rule GenerateFirmwareLtk:
@@ -88,6 +95,19 @@ rule GenerateFirmwareLtk:
     ]->
     [
         !FirmwareLtk(ltk)
+    ]
+
+rule GenerateFirmwarePubPrKey:
+    [
+        Fr(key)
+    ]
+    --[
+        GenerateFirmwarePubPrKey(key)
+    ]->
+    [
+        !FirmwarePrKey(key),
+        !FirmwarePubKey(pk(key)),
+        Out(pk(key))
     ]
 
 rule GenerateGuestLtk:
@@ -111,6 +131,17 @@ rule CompromiseFirmwareLtk:
     ]->
     [
         Out(ltk)
+    ]
+
+rule CompromiseFirmwarePrKey:
+    [
+        !FirmwarePrKey(key),
+    ]
+    --[
+        CompromiseFirmwarePrKey(key)
+    ]->
+    [
+        Out(key)
     ]
 
 rule CompromiseGuestLtk:
@@ -137,7 +168,7 @@ rule SwitchThreadToGuest:
         !FirmwareLtk(ltk),
         !RMPEntry(row3, SPA1, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !RMPEntry(row4, SPA2, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA1, oldHypervisorContextEncrypted),
+        PageContent(SPA1, oldData),
         PageContent(SPA2, GuestContextEncrypted)
     ]
     --[
