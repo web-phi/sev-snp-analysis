@@ -126,8 +126,8 @@ rule CompromiseGuestLtk:
 
 rule SwitchThreadToGuest:
     let
-        ASID = fst(sdec(ltk, GuestContextEncrypted))
-        GuestContext = snd(sdec(ltk, GuestContextEncrypted))
+        ASID = fst(sdec(GuestContextEncrypted, ltk))
+        GuestContext = snd(sdec(GuestContextEncrypted, ltk))
     in
     [
         Fr(row1),
@@ -144,22 +144,22 @@ rule SwitchThreadToGuest:
         ContextSwitch(row1, TID, ASID),
         AccessPointer(row3),
         AccessPointer(row4),
-        Write(SPA1, 'FIRMWARE', 'NULL ASID', senc(ltk, <'NULL ASID', HypervisorState>)),
+        Write(SPA1, 'FIRMWARE', 'NULL ASID', senc(<'NULL ASID', HypervisorState>, ltk)),
         Read(SPA2, 'FIRMWARE', 'NULL ASID', GuestContextEncrypted),
         Drop(row2)
     ]->
     [
         !RunningState(row1, TID, ASID),
         ProcessorState(TID, GuestContext),
-        PageContent(SPA1, senc(ltk, <'NULL ASID', HypervisorState>)),
+        PageContent(SPA1, senc(<'NULL ASID', HypervisorState>, ltk)),
         PageContent(SPA2, GuestContextEncrypted),
-        Out(senc(ltk, <'NULL ASID', HypervisorState>))
+        Out(senc(<'NULL ASID', HypervisorState>, ltk))
     ]
 
 rule SwitchThreadToHypervisor:
     let
-        ASID = fst(sdec(ltk, oldGuestContextEncrypted))
-        HypervisorContext = snd(sdec(ltk, HypervisorContextEncrypted))
+        ASID = fst(sdec(oldGuestContextEncrypted, ltk))
+        HypervisorContext = snd(sdec(HypervisorContextEncrypted, ltk))
     in
     [
         Fr(row1),
@@ -176,16 +176,16 @@ rule SwitchThreadToHypervisor:
         ContextSwitch(row1, TID, ASID),
         AccessPointer(row3),
         AccessPointer(row4),
-        Write(SPA1, 'FIRMWARE', 'NULL ASID', senc(ltk, <'NULL ASID', GuestState>)),
+        Write(SPA1, 'FIRMWARE', 'NULL ASID', senc(<'NULL ASID', GuestState>, ltk)),
         Read(SPA2, 'FIRMWARE', 'NULL ASID', HypervisorContextEncrypted),
         Drop(row2)
     ]->
     [
         !RunningState(row1, TID, 'NULL ASID'),
         ProcessorState(TID, HypervisorContext),
-        PageContent(SPA1, senc(ltk, <ASID, GuestState>)),
+        PageContent(SPA1, senc(<ASID, GuestState>, ltk)),
         PageContent(SPA2, HypervisorContextEncrypted),
-        Out(senc(ltk, <ASID, GuestState>))
+        Out(senc(<ASID, GuestState>, ltk))
     ]
 
 rule AssignPageToFW:
@@ -260,7 +260,7 @@ rule GuestValidate:
 
 rule ReadFromGuestPage:
     let
-        data = sdec(<ltk, SPA>, dataEncrypted)
+        data = sdec(dataEncrypted, <ltk, SPA>)
     in
     [
         !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, 'VALID'),
@@ -281,7 +281,7 @@ rule ReadFromGuestPage:
 
 rule WriteToGuestPage:
     let
-        oldContent = sdec(<ltk, SPA>, oldContentEncrypted)
+        oldContent = sdec(oldContentEncrypted, <ltk, SPA>)
     in
     [
         !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, 'VALID'),
@@ -291,14 +291,14 @@ rule WriteToGuestPage:
         ProcessorState(TID, data)
     ]
     --[
-        Write(SPA, 'GUEST', ASID, senc(<ltk, SPA>, data)),
+        Write(SPA, 'GUEST', ASID, senc(data, <ltk, SPA>)),
         AccessPointer(row1),
         AccessPointer(row2)
     ]->
     [
-        PageContent(SPA, senc(<ltk, SPA>, data)),
+        PageContent(SPA, senc(data, <ltk, SPA>)),
         ProcessorState(TID, data),
-        Out(senc(<ltk, SPA>, data))
+        Out(senc(data, <ltk, SPA>))
     ]
 
 rule ReadFromHypervisorPage:
@@ -336,22 +336,15 @@ rule WriteToHypervisorPage:
         Out(data)
     ]
 
-lemma Types[sources]:
-"
-    (All SPA owner ASID content #i.
-    Read(SPA, owner, ASID, content) @ i ==>
-        ((Ex #j. KU(content) @ j
-            & #j < #i)
-        | (Ex prevOwner prevASID #j. Write(SPA, prevOwner, prevASID, content) @ j
-            & #j < #i)))
-    &
-    (All SPA owner ASID content #i.
-    Write(SPA, owner, ASID, content) @ i ==>
-        ((Ex #j. KU(content) @ j
-            & #j < #i)
-        | (Ex prevSPA prevOwner prevASID #j. Read(prevSPA, prevOwner, prevASID, content) @ j
-            & #j < #i)))
-"
+// lemma Types[sources]:
+// "
+//     All SPA owner ASID content #i.
+//     Read(SPA, owner, ASID, content) @ i ==>
+//         ((Ex #j. KU(content) @ j
+//             & #j < #i)
+//         | (Ex #j. Write(SPA, owner, ASID, content) @ j
+//             & #j < #i))
+// "
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
 "
