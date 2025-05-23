@@ -1,6 +1,6 @@
 theory SEV_SNP_MEMORY begin
 
-builtins: asymmetric-encryption, symmetric-encryption
+builtins: symmetric-encryption
 
 restriction PointerCanBeDroppedOnlyOnce:
 "
@@ -65,13 +65,9 @@ rule InitializePage:
     ]
 
 rule InitializeGuest:
-    let
-        GuestImage = adec(GuestImageEncrypted, pk(prKey))
-    in
     [
         Fr(ASID),
-        In(GuestImageEncrypted),
-        !FirmwarePrKey(prKey),
+        In(GuestImage),
         !FirmwareLtk(ltk),
         !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         PageContent(SPA, oldContent)
@@ -97,19 +93,6 @@ rule GenerateFirmwareLtk:
         !FirmwareLtk(ltk)
     ]
 
-rule GenerateFirmwarePubPrKey:
-    [
-        Fr(key)
-    ]
-    --[
-        GenerateFirmwarePubPrKey(key)
-    ]->
-    [
-        !FirmwarePrKey(key),
-        !FirmwarePubKey(pk(key)),
-        Out(pk(key))
-    ]
-
 rule GenerateGuestLtk:
     [
         Fr(ltk),
@@ -131,17 +114,6 @@ rule CompromiseFirmwareLtk:
     ]->
     [
         Out(ltk)
-    ]
-
-rule CompromiseFirmwarePrKey:
-    [
-        !FirmwarePrKey(key),
-    ]
-    --[
-        CompromiseFirmwarePrKey(key)
-    ]->
-    [
-        Out(key)
     ]
 
 rule CompromiseGuestLtk:
@@ -367,6 +339,17 @@ rule WriteToHypervisorPage:
     ]
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+lemma Types[sources]:
+"
+    All SPA owner ASID content #i.
+    Read(SPA, owner, ASID, content) @ i ==>
+        ((Ex #j. KU(content) @ j
+            & #j < #i)
+        | (Ex prevOwner prevASID #j. Write(SPA, prevOwner, prevASID, content) @ j
+            & #j < #i)
+        | content = 'NULL DATA')
+"
 
 lemma ExeThreadCanSpawn: exists-trace
 "
