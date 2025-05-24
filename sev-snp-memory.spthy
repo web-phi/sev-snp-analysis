@@ -1,6 +1,6 @@
 theory SEV_SNP_MEMORY begin
 
-builtins: symmetric-encryption
+builtins: hashing, symmetric-encryption
 
 restriction PointerCanBeDroppedOnlyOnce:
 "
@@ -65,9 +65,11 @@ rule InitializePage:
     ]
 
 rule InitializeGuest:
+    let
+        GuestImage = h(<'Z3Vlc3QgaW1hZ2U', ASID>)
+    in
     [
         Fr(ASID),
-        In(GuestImage),
         !FirmwareLtk(ltk),
         !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         PageContent(SPA, oldContent)
@@ -155,8 +157,7 @@ rule SwitchThreadToGuest:
         !RunningState(row1, TID, ASID),
         ProcessorState(TID, GuestContext),
         PageContent(SPA1, senc(<'NULL ASID', HypervisorState>, ltk)),
-        PageContent(SPA2, GuestContextEncrypted),
-        Out(senc(<'NULL ASID', HypervisorState>, ltk))
+        PageContent(SPA2, GuestContextEncrypted)
     ]
 
 rule SwitchThreadToHypervisor:
@@ -187,8 +188,7 @@ rule SwitchThreadToHypervisor:
         !RunningState(row1, TID, 'NULL ASID'),
         ProcessorState(TID, HypervisorContext),
         PageContent(SPA1, senc(<ASID, GuestState>, ltk)),
-        PageContent(SPA2, HypervisorContextEncrypted),
-        Out(senc(<ASID, GuestState>, ltk))
+        PageContent(SPA2, HypervisorContextEncrypted)
     ]
 
 rule AssignPageToFW:
@@ -222,6 +222,7 @@ rule AssignPageToGVM:
 rule ReturnPageFromGVM:
     [
         !RMPEntry(row1, SPA, 'GUEST', ASID, GPA, isValid),
+        PageContent(SPA, content),
         Fr(row2)
     ]
     --[
@@ -229,12 +230,15 @@ rule ReturnPageFromGVM:
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, content),
+        Out(content)
     ]
 
 rule ReturnPageFromFW:
     [
         !RMPEntry(row1, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, content),
         Fr(row2)
     ]
     --[
@@ -242,7 +246,9 @@ rule ReturnPageFromFW:
         Drop(row1)
     ]->
     [
-        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID')
+        !RMPEntry(row2, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
+        PageContent(SPA, content),
+        Out(content)
     ]
 
 rule GuestValidate:
@@ -300,8 +306,7 @@ rule WriteToGuestPage:
     ]->
     [
         PageContent(SPA, senc(data, <ltk, SPA>)),
-        ProcessorState(TID, data),
-        Out(senc(data, <ltk, SPA>))
+        ProcessorState(TID, data)
     ]
 
 rule ReadFromHypervisorPage:
