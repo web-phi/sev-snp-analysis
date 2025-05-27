@@ -2,9 +2,6 @@ theory SEV_SNP_MEMORY begin
 
 builtins: symmetric-encryption
 
-functions:
-    comp/2
-
 restriction PointerCanBeDroppedOnlyOnce:
 "
     All row #i #j.
@@ -15,8 +12,8 @@ restriction PointerCanBeDroppedOnlyOnce:
 
 restriction DroppedPointerCannotBeAccessed:
 "
-    All row SPA #i #j.
-    AccessMemoryPointer(row, SPA) @ i
+    All row #i #j.
+    AccessMemoryPointer(row) @ i
     & Drop(row) @ j ==>
         #i < #j
 "
@@ -29,19 +26,11 @@ restriction DroppedPointerCannotBeUpdated:
         #i < #j
 "
 
-restriction InstructionRegisterCanBeInitializedOnlyOnce:
+restriction ProcessorStateCanBeInitializedOnlyOnce:
 "
     All #i #j.
-    InitializeInstructionRegister() @ i
-    & InitializeInstructionRegister() @ j ==>
-        #i = #j
-"
-
-restriction DataRegisterCanBeInitializedOnlyOnce:
-"
-    All #i #j.
-    InitializeDataRegister() @ i
-    & InitializeDataRegister() @ j ==>
+    InitializeProcessorState() @ i
+    & InitializeProcessorState() @ j ==>
         #i = #j
 "
 
@@ -54,7 +43,7 @@ rule InitializePage:
     --[
         InitializePage(SPA),
         RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        AccessMemoryPointer(row, SPA),
+        AccessMemoryPointer(row),
         Write(SPA, 'HYPERVISOR', 'NULL ASID', initialData)
     ]->
     [
@@ -74,26 +63,15 @@ rule InitializeGuest:
         !GuestID(ASID)
     ]
 
-rule InitializeInstructionRegister:
+rule InitializeProcessorState:
     [
         !FirmwareLtk(ltkFW)
     ]
     --[
-        InitializeInstructionRegister()
+        InitializeProcessorState()
     ]->
     [
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-
-rule InitializeDataRegister:
-    [
-        !FirmwareLtk(ltkFW)
-    ]
-    --[
-        InitializeDataRegister()
-    ]->
-    [
-        DataRegister(senc('NULL DATA', ltkFW))
+        ProcessorState(senc('NULL DATA', ltkFW))
     ]
 
 rule GenerateFirmwareLtk:
@@ -240,92 +218,9 @@ rule GuestValidate:
         !RMPEntry(row2, SPA, 'GUEST', ASID, GPA, 'VALID')
     ]
 
-rule HypervisorPageLeak:
-    [
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, content)
-    ]
-    --[
-        Read(SPA, 'HYPERVISOR', 'NULL ASID', content),
-        AccessMemoryPointer(row, SPA)
-    ]->
-    [
-        PageContent(SPA, content),
-        Out(content)
-    ]
-
-rule HypervisorPageOverwrite:
-    [
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        PageContent(SPA, oldContent),
-        In(newContent)
-    ]
-    --[
-        Write(SPA, 'HYPERVISOR', 'NULL ASID', newContent),
-        AccessMemoryPointer(row, SPA)
-    ]->
-    [
-        PageContent(SPA, newContent)
-    ]
-
-rule ClearInstructionRegister:
-    let
-        oldInstruction = sdec(oldInstructionEncrypted, ltkFW)
-    in
-    [
-        !FirmwareLtk(ltkFW),
-        InstructionRegister(oldInstructionEncrypted)
-    ]
-    --[
-        ClearInstructionRegister(oldInstruction)
-    ]->
-    [
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-
-rule ClearDataRegister:
-    let
-        oldData = sdec(oldDataEncrypted, ltkFW)
-    in
-    [
-        !FirmwareLtk(ltkFW),
-        DataRegister(oldDataEncrypted)
-    ]
-    --[
-        ClearDataRegister(oldData)
-    ]->
-    [
-        DataRegister(senc('NULL DATA', ltkFW))
-    ]
-
-rule LoadInstructionFromGuestPage:
-    let
-        instruction = sdec(instructionEncrypted, <ltk, SPA>)
-    in
-    [
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, 'GUEST', ASID, GPA, 'VALID'),
-        !GuestLtk(ltk, ASID),
-        !FirmwareLtk(ltkFW),
-        PageContent(SPA, instructionEncrypted),
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-    --[
-        LoadInstruction(SPA, 'GUEST', ASID, instruction),
-        Read(SPA, 'GUEST', ASID, instructionEncrypted),
-        AccessMemoryPointer(row, SPA)
-    ]->
-    [
-        PageContent(SPA, senc(instruction, <ltk, SPA>)),
-        InstructionRegister(senc(instruction, ltkFW))
-    ]
-
-rule LoadDataFromGuestPage:
+rule ReadFromGuestPage:
     let
         data = sdec(dataEncrypted, <ltk, SPA>)
-        oldData = sdec(oldDataEncrypted, ltkFW)
     in
     [
         !SystemPA(SPA),
@@ -333,22 +228,19 @@ rule LoadDataFromGuestPage:
         !GuestLtk(ltk, ASID),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, dataEncrypted),
-        DataRegister(oldDataEncrypted)
+        ProcessorState(oldDataEncrypted)
     ]
     --[
-        LoadData(SPA, 'GUEST', ASID, data),
         Read(SPA, 'GUEST', ASID, dataEncrypted),
-        AccessMemoryPointer(row, SPA)
+        AccessMemoryPointer(row)
     ]->
     [
-        PageContent(SPA, senc(data, <ltk, SPA>)),
-        DataRegister(senc(data, ltkFW))
+        PageContent(SPA, dataEncrypted),
+        ProcessorState(senc(data, ltkFW))
     ]
 
 rule WriteToGuestPage:
     let
-        oldContent = sdec(oldContentEncrypted, <ltk, SPA>)
-        instruction = sdec(instructionEncrypted, ltkFW)
         data = sdec(dataEncrypted, ltkFW)
     in
     [
@@ -357,63 +249,36 @@ rule WriteToGuestPage:
         !GuestLtk(ltk, ASID),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, oldContentEncrypted),
-        InstructionRegister(instructionEncrypted),
-        DataRegister(dataEncrypted)
+        ProcessorState(dataEncrypted)
     ]
     --[
-        Write(SPA, 'GUEST', ASID, senc(comp(instruction, data), <ltk, SPA>)),
-        AccessMemoryPointer(row, SPA),
-        ClearInstructionRegister(instruction),
-        ClearDataRegister(data)
+        Write(SPA, 'GUEST', ASID, senc(data, <ltk, SPA>)),
+        AccessMemoryPointer(row)
     ]->
     [
-        PageContent(SPA, senc(comp(instruction, data), <ltk, SPA>)),
-        InstructionRegister(senc('NOP', ltkFW)),
-        DataRegister(senc('NULL DATA', ltkFW))
+        PageContent(SPA, senc(data, <ltk, SPA>)),
+        ProcessorState(dataEncrypted)
     ]
 
-rule LoadInstructionFromHypervisorPage:
-    [
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        !FirmwareLtk(ltkFW),
-        PageContent(SPA, instruction),
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-    --[
-        LoadInstruction(SPA, 'HYPERVISOR', 'NULL ASID', instruction),
-        Read(SPA, 'HYPERVISOR', 'NULL ASID', instruction),
-        AccessMemoryPointer(row, SPA)
-    ]->
-    [
-        PageContent(SPA, instruction),
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-
-rule LoadDataFromHypervisorPage:
-    let
-        oldData = sdec(oldDataEncrypted, ltkFW)
-    in
+rule ReadFromHypervisorPage:
     [
         !SystemPA(SPA),
         !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, data),
-        DataRegister(oldDataEncrypted)
+        ProcessorState(oldDataEncrypted)
     ]
     --[
-        LoadData(SPA, 'HYPERVISOR', 'NULL ASID', data),
         Read(SPA, 'HYPERVISOR', 'NULL ASID', data),
-        AccessMemoryPointer(row, SPA)
+        AccessMemoryPointer(row)
     ]->
     [
         PageContent(SPA, data),
-        InstructionRegister(senc(data, ltkFW))
+        ProcessorState(senc(data, ltkFW))
     ]
 
 rule WriteToHypervisorPage:
     let
-        instruction = sdec(instructionEncrypted, ltkFW)
         data = sdec(dataEncrypted, ltkFW)
     in
     [
@@ -421,68 +286,39 @@ rule WriteToHypervisorPage:
         !RMPEntry(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, oldContent),
-        InstructionRegister(instructionEncrypted),
-        DataRegister(dataEncrypted)
+        ProcessorState(dataEncrypted)
     ]
     --[
-        Write(SPA, 'HYPERVISOR', 'NULL ASID', comp(instruction, data)),
-        AccessMemoryPointer(row, SPA),
-        ClearInstructionRegister(instruction),
-        ClearDataRegister(data)
+        Write(SPA, 'HYPERVISOR', 'NULL ASID', data),
+        AccessMemoryPointer(row)
     ]->
     [
-        PageContent(SPA, comp(instruction, data)),
-        InstructionRegister(senc('NOP', ltkFW)),
-        DataRegister(senc('NULL DATA', ltkFW))
+        PageContent(SPA, data),
+        ProcessorState(dataEncrypted)
     ]
 
-rule LoadInstructionFromFirmwarePage:
-    let
-        instruction = sdec(instructionEncrypted, <ltkFW, SPA>)
-    in
-    [
-        !SystemPA(SPA),
-        !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
-        !FirmwareLtk(ltkFW),
-        PageContent(SPA, instructionEncrypted),
-        InstructionRegister(senc('NOP', ltkFW))
-    ]
-    --[
-        LoadInstruction(SPA, 'FIRMWARE', 'NULL ASID', instruction),
-        Read(SPA, 'FIRMWARE', 'NULL ASID', instructionEncrypted),
-        AccessMemoryPointer(row, SPA)
-    ]->
-    [
-        PageContent(SPA, senc(instruction, <ltkFW, SPA>)),
-        InstructionRegister(senc(instruction, ltkFW))
-    ]
-
-rule LoadDataFromFirmwarePage:
+rule ReadFromFirmwarePage:
     let
         data = sdec(dataEncrypted, <ltkFW, SPA>)
-        oldData = sdec(oldDataEncrypted, ltkFW)
     in
     [
         !SystemPA(SPA),
         !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, dataEncrypted),
-        DataRegister(oldDataEncrypted)
+        ProcessorState(oldDataEncrypted)
     ]
     --[
-        LoadData(SPA, 'FIRMWARE', 'NULL ASID', data),
         Read(SPA, 'FIRMWARE', 'NULL ASID', dataEncrypted),
-        AccessMemoryPointer(row, SPA)
+        AccessMemoryPointer(row)
     ]->
     [
-        PageContent(SPA, senc(data, <ltkFW, SPA>)),
-        DataRegister(senc(data, ltkFW))
+        PageContent(SPA, dataEncrypted),
+        ProcessorState(senc(data, ltkFW))
     ]
 
 rule WriteToFirmwarePage:
     let
-        oldContent = sdec(oldContentEncrypted, <ltk, SPA>)
-        instruction = sdec(instructionEncrypted, ltkFW)
         data = sdec(dataEncrypted, ltkFW)
     in
     [
@@ -490,36 +326,36 @@ rule WriteToFirmwarePage:
         !RMPEntry(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'NULL VALID'),
         !FirmwareLtk(ltkFW),
         PageContent(SPA, oldContentEncrypted),
-        InstructionRegister(instructionEncrypted),
-        DataRegister(dataEncrypted)
+        ProcessorState(dataEncrypted)
     ]
     --[
-        Write(SPA, 'FIRMWARE', 'NULL ASID', senc(comp(instruction, data), <ltkFW, SPA>)),
-        AccessMemoryPointer(row, SPA),
-        ClearInstructionRegister(instruction),
-        ClearDataRegister(data)
+        Write(SPA, 'FIRMWARE', 'NULL ASID', senc(data, <ltkFW, SPA>)),
+        AccessMemoryPointer(row)
     ]->
     [
-        PageContent(SPA, senc(comp(instruction, data), <ltkFW, SPA>)),
-        InstructionRegister(senc('NOP', ltkFW)),
-        DataRegister(senc('NULL DATA', ltkFW))
+        PageContent(SPA, senc(data, <ltkFW, SPA>)),
+        ProcessorState(dataEncrypted)
     ]
 
 lemma Types[sources]:
 "
-    All SPA owner ASID content #i.
+    (All SPA owner ASID content #i.
     Read(SPA, owner, ASID, content) @ i ==>
         ((Ex #j. KU(content) @ j
             & #j < #i)
         | (Ex prevOwner prevASID #j. Write(SPA, prevOwner, prevASID, content) @ j
-            & #j < #i))
+            & #j < #i)
+        | (Ex #j. CompromiseWriteAccess(SPA, content) @ j
+            & #j < #i)))
     &
-    All SPA content #i.
+    (All SPA content #i.
     CompromiseReadAccess(SPA, content) @ i ==>
         ((Ex #j. KU(content) @ j
             & #j < #i)
         | (Ex prevOwner prevASID #j. Write(SPA, prevOwner, prevASID, content) @ j
-            & #j < #i))
+            & #j < #i)
+        | (Ex #j. CompromiseWriteAccess(SPA, content) @ j
+            & #j < #i)))
 "
 
 lemma ExePageCanGoFromFWToGVM: exists-trace
@@ -570,32 +406,32 @@ lemma ExeGuestCanWriteAfterValidation: exists-trace
     & #i < #j
 "
 
-lemma ExeGuestCanLoadDataAfterWriting: exists-trace
+lemma ExeGuestCanReadAfterWriting: exists-trace
 "
     Ex row SPA ASID GPA data #i #j #k.
     RMPUpdate(row, SPA, 'GUEST', ASID, GPA, 'VALID') @ i
     & Write(SPA, 'GUEST', ASID, data) @ j
-    & LoadData(SPA, 'GUEST', ASID, data) @ k
+    & Read(SPA, 'GUEST', ASID, data) @ k
     & #i < #j
     & #j < #k
 "
 
-lemma ExeHypervisorCanLoadDataAfterWriting: exists-trace
+lemma ExeHypervisorCanReadAfterWriting: exists-trace
 "
     Ex row SPA data #i #j #k.
     RMPUpdate(row, SPA, 'HYPERVISOR', 'NULL ASID', 'NULL GPA', 'VALID') @ i
     & Write(SPA, 'HYPERVISOR', 'NULL ASID', data) @ j
-    & LoadData(SPA, 'HYPERVISOR', 'NULL ASID', data) @ k
+    & Read(SPA, 'HYPERVISOR', 'NULL ASID', data) @ k
     & #i < #j
     & #j < #k
 "
 
-lemma ExeFirmwareCanLoadDataAfterWriting: exists-trace
+lemma ExeFirmwareCanReadAfterWriting: exists-trace
 "
     Ex row SPA data #i #j #k.
     RMPUpdate(row, SPA, 'FIRMWARE', 'NULL ASID', 'NULL GPA', 'VALID') @ i
     & Write(SPA, 'FIRMWARE', 'NULL ASID', data) @ j
-    & LoadData(SPA, 'FIRMWARE', 'NULL ASID', data) @ k
+    & Read(SPA, 'FIRMWARE', 'NULL ASID', data) @ k
     & #i < #j
     & #j < #k
 "
