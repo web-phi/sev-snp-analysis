@@ -1,6 +1,133 @@
 theory SEV_SNP_ANALYSIS begin
 
+builtins: hashing, signing, symmetric-encryption
 
+rule PageCreate:
+    [
+        Fr(spa)
+    ]
+    --[
+        PageCreate(spa)
+    ]->
+    [
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+        PageContent(spa, '0'),
+        Out(spa)
+    ]
+
+rule DeployGuest:
+    [
+        Fr(asid)
+    ]
+    --[
+        DeployGuest(asid)
+    ]->
+    [
+        !GuestID(asid),
+        Out(asid)
+    ]
+
+rule HypervisorFixPage:
+    [
+        In(<'RMP_UPDATE', spa, 'HV', 'immutable'>),
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
+    ]
+    --[
+        HypervisorFixPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'HV', 'immutable', 'invalid', '0', '0')
+    ]
+
+rule AssignPageToGVM:
+    [
+        In(<'RMP_UPDATE', spa, asid>),
+        !GuestID(asid),
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+        Fr(gpa)
+    ]
+    --[
+        RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
+        NPTUpdate(asid, gpa, spa),
+        AssignPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
+        NPTEntry(asid, gpa, spa)
+    ]
+
+rule AssignPageToFW:
+    [
+        In(<'RMP_UPDATE', spa, 'FW', mutable>),
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
+    ]
+    --[
+        RMPUpdate(spa, 'FW', mutable, 'invalid', '0', '0'),
+        AssignPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'FW', mutable, 'invalid', '0', '0')
+    ]
+
+rule ReclaimPageFromGVM:
+    [
+        In(<'RMP_UPDATE', spa, 'HV'>),
+        !GuestID(asid),
+        NPTEntry(asid, gpa, spa),
+        RMPEntry(spa, 'GVM', 'mutable', valid, asid, gpa)
+    ]
+    --[
+        RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+        NPTClear(asid, gpa),
+        ReclaimPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
+    ]
+
+rule ReclaimPageFromFW:
+    [
+        In(<'RMP_UPDATE', spa, 'HV'>),
+        RMPEntry(spa, 'FW', 'mutable', 'invalid', '0', '0')
+    ]
+    --[
+        RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+        ReclaimPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
+    ]
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////                        ////////////////////////////
+////////////////////////////         LEMMAS         ////////////////////////////
+////////////////////////////                        ////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+lemma ExeHypervisorCanFixPage: exists-trace
+"
+    Ex spa #i. HypervisorFixPage(spa) @ i
+"
+
+lemma ExePageCanBeReclaimed: exists-trace
+"
+    Ex spa #i. ReclaimPage(spa) @ i
+"
+
+lemma ExePageCanBeReclaimedFromGuest: exists-trace
+"
+    Ex spa asid gpa #i #j.
+    RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ i
+    & RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
+    & i < j
+"
+
+lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
+"
+    Ex spa asid gpa1 gpa2 #i #j.
+    RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa1) @ i
+    & RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa2) @ j
+    & i < j
+"
 
 end
-
