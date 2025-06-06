@@ -2,6 +2,23 @@ theory SEV_SNP_ANALYSIS begin
 
 builtins: hashing, signing, symmetric-encryption
 
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////                        ////////////////////////////
+////////////////////////////      RESTRICTIONS      ////////////////////////////
+////////////////////////////                        ////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+restriction Unique:
+"
+    All x #i #j. Uniq(x) @ i & Uniq(x) @ j ==> #i = #j
+"
+
+////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////   SYSTEM   //////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 rule PageCreate:
     [
         Fr(spa)
@@ -12,7 +29,7 @@ rule PageCreate:
     [
         RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
         PageContent(spa, '0'),
-        Out(spa)
+        Out(<'SPA', spa>)
     ]
 
 rule DeployGuest:
@@ -24,8 +41,52 @@ rule DeployGuest:
     ]->
     [
         !GuestID(asid),
-        Out(asid)
+        Out(<'ASID', asid>)
     ]
+
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////   KEYS   ///////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+rule GenerateArk:
+    let
+        pubData = <'ARK', h(ark), pk(ark)>
+    in
+    [
+        Fr(ark)
+    ]
+    --[
+        GenerateArk(ark, h(ark)),
+        Uniq(<'ARK', h(ark)>)
+    ]->
+    [
+        !LTK('ARK', h(ark), ark),
+        Out(<pubData, sign(pubData, ark)>)
+    ]
+
+rule GenerateVmpck:
+    let
+        vmpck = h(<key, asid>)
+        vmpckLabel = <'VMPCK', asid>
+        pubData = <vmpckLabel, h(vmpck)>
+    in
+    [
+        !GuestID(asid),
+        !LTK('ARK', arkId, ark),
+        Fr(key)
+    ]
+    --[
+        GenerateVmpck(vmpck, h(vmpck)),
+        Uniq(<vmpckLabel, h(vmpck)>)
+    ]->
+    [
+        !LTK(vmpckLabel, h(vmpck), vmpck),
+        Out(<pubData, sign(pubData, ark)>)
+    ]
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////   HYPERVISOR   ////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 rule HypervisorFixPage:
     [
@@ -48,12 +109,13 @@ rule AssignPageToGVM:
     ]
     --[
         RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
-        NPTUpdate(asid, gpa, spa),
+        NPTAssign(asid, gpa, spa),
         AssignPage(spa)
     ]->
     [
         RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
-        NPTEntry(asid, gpa, spa)
+        NPTEntry(asid, gpa, spa),
+        Out(<'GPA', gpa>)
     ]
 
 rule AssignPageToFW:
@@ -99,10 +161,84 @@ rule ReclaimPageFromFW:
     ]
 
 ////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////   FIRMWARE   /////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+rule FirmwareRelinquishPage:
+    [
+        RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
+    ]
+    --[
+        RMPUpdate(spa, 'FW', 'mutable', 'invalid', '0', '0'),
+        FirmwareRelinquishPage(spa)
+    ]->
+    [
+        RMPEntry(spa, 'FW', 'mutable', 'invalid', '0', '0')
+    ]
+
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////   GUEST VM   /////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+rule GuestRequestValidation:
+    let
+        message = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+    in
+    [
+        !GuestID(asid),
+        !LTK(<'VMPCK', asid>, vmpckId, vmpck),
+        NPTEntry(asid, gpa, spa)
+    ]
+    --[
+        GuestSendMessage(<message, sign(message, vmpck)>)
+    ]->
+    [
+        NPTEntry(asid, gpa, spa),
+        Out(<message, sign(message, vmpck)>)
+    ]
+
+rule ValidateGuestPage:
+    let
+        message = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+        auth = sign(message, vmpck)
+    in
+    [
+        !GuestID(asid),
+        !LTK(<'VMPCK', asid>, vmpckId, vmpck),
+        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
+        In(<message, auth>)
+    ]
+    --[
+        FirmwareReceiveMessage(<message, auth>),
+        ValidateGuestPage(asid, gpa, spa)
+    ]->
+    [
+        RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa)
+    ]
+
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////                        ////////////////////////////
 ////////////////////////////         LEMMAS         ////////////////////////////
 ////////////////////////////                        ////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+lemma Types[sources]:
+"
+    (All message #i.
+    FirmwareReceiveMessage(message) @ i ==>
+        (Ex #j. KU(message) @ j
+            & j < i)
+        | (Ex #j. GuestSendMessage(message) @ j
+            & j < i))
+    &
+    (All message key #i.
+    GuestSendMessage(<message, sign(message, key)>) @ i ==>
+        (Ex #j. KU(message) @ j
+            & j < i))
+"
 
 lemma ExeHypervisorCanFixPage: exists-trace
 "
@@ -118,6 +254,14 @@ lemma ExePageCanBeReclaimedFromGuest: exists-trace
 "
     Ex spa asid gpa #i #j.
     RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ i
+    & RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
+    & i < j
+"
+
+lemma ExePageCanBeReclaimedFromFirmware: exists-trace
+"
+    Ex spa #i #j.
+    RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ i
     & RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
     & i < j
 "
