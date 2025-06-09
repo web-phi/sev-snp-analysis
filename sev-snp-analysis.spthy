@@ -104,18 +104,16 @@ rule AssignPageToGVM:
     [
         In(<'RMP_UPDATE', spa, asid>),
         !GuestID(asid),
-        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
-        Fr(gpa)
+        RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
     ]
     --[
-        RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
-        NPTAssign(asid, gpa, spa),
+        RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, $gpa),
+        NPTAssign(asid, $gpa, spa),
         AssignPage(spa)
     ]->
     [
-        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
-        NPTEntry(asid, gpa, spa),
-        Out(<'GPA', gpa>)
+        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, $gpa),
+        NPTEntry(asid, $gpa, spa)
     ]
 
 rule AssignPageToFW:
@@ -135,12 +133,12 @@ rule ReclaimPageFromGVM:
     [
         In(<'RMP_UPDATE', spa, 'HV'>),
         !GuestID(asid),
-        NPTEntry(asid, gpa, spa),
-        RMPEntry(spa, 'GVM', 'mutable', valid, asid, gpa)
+        NPTEntry(asid, $gpa, spa),
+        RMPEntry(spa, 'GVM', 'mutable', valid, asid, $gpa)
     ]
     --[
         RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0'),
-        NPTClear(asid, gpa),
+        NPTClear(asid, $gpa),
         ReclaimPage(spa)
     ]->
     [
@@ -182,38 +180,38 @@ rule FirmwareRelinquishPage:
 
 rule GuestRequestValidation:
     let
-        message = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+        message = <'PAGE_VALIDATE', asid, $gpa, 'valid'>
     in
     [
         !GuestID(asid),
         !LTK(<'VMPCK', asid>, vmpckId, vmpck),
-        NPTEntry(asid, gpa, spa)
+        NPTEntry(asid, $gpa, spa)
     ]
     --[
         GuestSendMessage(<message, sign(message, vmpck)>)
     ]->
     [
-        NPTEntry(asid, gpa, spa),
+        NPTEntry(asid, $gpa, spa),
         Out(<message, sign(message, vmpck)>)
     ]
 
 rule ValidateGuestPage:
     let
-        message = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+        message = <'PAGE_VALIDATE', asid, $gpa, 'valid'>
         auth = sign(message, vmpck)
     in
     [
         !GuestID(asid),
         !LTK(<'VMPCK', asid>, vmpckId, vmpck),
-        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
+        RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, $gpa),
         In(<message, auth>)
     ]
     --[
         FirmwareReceiveMessage(<message, auth>),
-        ValidateGuestPage(asid, gpa, spa)
+        ValidateGuestPage(asid, $gpa, spa)
     ]->
     [
-        RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa)
+        RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, $gpa)
     ]
 
 
@@ -224,21 +222,6 @@ rule ValidateGuestPage:
 ////////////////////////////                        ////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-
-lemma Types[sources]:
-"
-    (All message #i.
-    FirmwareReceiveMessage(message) @ i ==>
-        (Ex #j. KU(message) @ j
-            & j < i)
-        | (Ex #j. GuestSendMessage(message) @ j
-            & j < i))
-    &
-    (All message key #i.
-    GuestSendMessage(<message, sign(message, key)>) @ i ==>
-        (Ex #j. KU(message) @ j
-            & j < i))
-"
 
 lemma ExeHypervisorCanFixPage: exists-trace
 "
