@@ -76,7 +76,7 @@ rule GenerateVmpck:
         Fr(key)
     ]
     --[
-        GenerateVmpck(vmpck, h(vmpck)),
+        GenerateVmpck(asid, vmpck),
         Uniq(<vmpckLabel, h(vmpck)>)
     ]->
     [
@@ -189,7 +189,7 @@ rule GuestRequestValidation:
         NPTEntry(asid, $gpa, spa)
     ]
     --[
-        GuestSendMessage(<message, sign(message, vmpck)>)
+        GuestSendRequest(<message, sign(message, vmpck)>)
     ]->
     [
         NPTEntry(asid, $gpa, spa),
@@ -208,7 +208,7 @@ rule ValidateGuestPage:
         In(<message, auth>)
     ]
     --[
-        FirmwareReceiveMessage(<message, auth>),
+        FirmwareReceiveRequest(<message, auth>),
         ValidateGuestPage(asid, $gpa, spa)
     ]->
     [
@@ -223,6 +223,17 @@ rule ValidateGuestPage:
 ////////////////////////////                        ////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+
+lemma Types[sources]:
+"
+    All message auth #i.
+        FirmwareReceiveRequest(<message, auth>) @ i
+    ==>
+        (Ex #j. KU(message) @ j
+            & #j < #i)
+        | (Ex #j. GuestSendRequest(<message, auth>) @ j
+            & #j < #i)
+"
 
 lemma ExeHypervisorCanFixPage: exists-trace
 "
@@ -260,7 +271,7 @@ lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 
 lemma ExeGuestPageCanBeValidated: exists-trace
 "
-    Ex spa asid gpa #i.
+    Ex asid gpa spa #i.
     ValidateGuestPage(asid, gpa, spa) @ i
 "
 
@@ -271,9 +282,21 @@ lemma GuestAddressMapsToUniqueSystemAddress:
         & NPTAssign(asid, gpa, spa2) @ k
         & #i < #k
     ==>
-        Ex #j. NPTClear(asid, gpa) @ j
+        Ex #j. (NPTClear(asid, gpa) @ j
             & #i < #j
-            & #j < #k
+            & #j < #k)
+"
+
+lemma PageCanOnlyBeValidatedAfterGuestRequest:
+"
+    All asid gpa spa #i.
+        ValidateGuestPage(asid, gpa, spa) @ i
+    ==>
+        Ex msg vmpck #j. (GuestSendRequest(<msg, sign(msg, vmpck)>) @ j
+            & msg = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+            & #j < #i
+            & (Ex #k. GenerateVmpck(asid, vmpck) @ k
+                & #k < #j))
 "
 
 end
