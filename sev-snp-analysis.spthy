@@ -109,7 +109,8 @@ rule AssignPageToGVM:
     --[
         RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, $gpa),
         NPTAssign(asid, $gpa, spa),
-        AssignPage(spa)
+        AssignPage(spa),
+        Uniq(<'GPA', $gpa>)
     ]->
     [
         RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, $gpa),
@@ -238,7 +239,7 @@ lemma ExePageCanBeReclaimedFromGuest: exists-trace
     Ex spa asid gpa #i #j.
     RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ i
     & RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
-    & i < j
+    & #i < #j
 "
 
 lemma ExePageCanBeReclaimedFromFirmware: exists-trace
@@ -246,7 +247,7 @@ lemma ExePageCanBeReclaimedFromFirmware: exists-trace
     Ex spa #i #j.
     RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ i
     & RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
-    & i < j
+    & #i < #j
 "
 
 lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
@@ -254,7 +255,25 @@ lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
     Ex spa asid gpa1 gpa2 #i #j.
     RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa1) @ i
     & RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa2) @ j
-    & i < j
+    & #i < #j
+"
+
+lemma ExeGuestPageCanBeValidated: exists-trace
+"
+    Ex spa asid gpa #i.
+    ValidateGuestPage(asid, gpa, spa) @ i
+"
+
+lemma GuestAddressMapsToUniqueSystemAddress:
+"
+    All asid gpa spa1 spa2 #i #k.
+        NPTAssign(asid, gpa, spa1) @ i
+        & NPTAssign(asid, gpa, spa2) @ k
+        & #i < #k
+    ==>
+        Ex #j. NPTClear(asid, gpa) @ j
+            & #i < #j
+            & #j < #k
 "
 
 end
