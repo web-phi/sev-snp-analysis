@@ -105,7 +105,7 @@ rule AssignPageToGVM:
 		In(<'RMP_UPDATE', spa, asid>),
 		!GuestID(asid),
 		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
-	Fr(gpa)
+		Fr(gpa)
 	]
 	--[
 		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
@@ -323,6 +323,30 @@ lemma ExeGuestPageCanBeRevalidated: exists-trace
 		& i < j
 "
 
+lemma PageCannotBeValidatedTwiceConsecutively:
+"
+	All asid gpa spa #i #j.
+		ValidateGuestPage(asid, gpa, spa) @ i
+		& ValidateGuestPage(asid, gpa, spa) @ j
+		& i < j
+	==>
+		Ex #k. InvalidateGuestPage(asid, gpa, spa) @ k
+			& i < k
+			& k < j
+"
+
+lemma PageCannotBeInvalidatedTwiceConsecutively:
+"
+	All asid gpa spa #i #j.
+		InvalidateGuestPage(asid, gpa, spa) @ i
+		& InvalidateGuestPage(asid, gpa, spa) @ j
+		& i < j
+	==>
+		Ex #k. ValidateGuestPage(asid, gpa, spa) @ k
+			& i < k
+			& k < j
+"
+
 lemma GuestAddressMapsToUniqueSystemAddress:
 "
 	All asid gpa spa1 spa2 #i #k.
@@ -331,6 +355,18 @@ lemma GuestAddressMapsToUniqueSystemAddress:
 		& i < k
 	==>
 		Ex #j. NPTClear(asid, gpa) @ j
+			& i < j
+			& j < k
+"
+
+lemma SystemAddressMapsToUniqueGuestAddress:
+"
+	All spa validity1 validity2 asid1 asid2 gpa1 gpa2 #i #k.
+		RMPUpdate(spa, 'GVM', 'mutable', validity1, asid1, gpa1) @ i
+		& RMPUpdate(spa, 'GVM', 'mutable', validity2, asid2, gpa2) @ k
+		& i < k
+	==>
+		Ex #j. RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0')  @ j
 			& i < j
 			& j < k
 "
@@ -359,28 +395,5 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest:
 				& k < j
 "
 
-lemma PageCannotBeValidatedTwiceConsecutively:
-"
-	All asid gpa spa #i #j.
-		ValidateGuestPage(asid, gpa, spa) @ i
-		& ValidateGuestPage(asid, gpa, spa) @ j
-		& i < j
-	==>
-		Ex #k. InvalidateGuestPage(asid, gpa, spa) @ k
-			& i < k
-			& k < j
-"
-
-lemma PageCannotBeInvalidatedTwiceConsecutively:
-"
-	All asid gpa spa #i #j.
-		InvalidateGuestPage(asid, gpa, spa) @ i
-		& InvalidateGuestPage(asid, gpa, spa) @ j
-		& i < j
-	==>
-		Ex #k. ValidateGuestPage(asid, gpa, spa) @ k
-			& i < k
-			& k < j
-"
 
 end
