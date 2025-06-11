@@ -159,6 +159,22 @@ rule ReclaimPageFromFW:
 		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
 	]
 
+rule FixGuestPage:
+	[
+		In(<'RMP_UPDATE', spa, asid, 'immutable'>),
+		!GuestID(asid),
+		RMPEntry(spa, 'GVM', 'mutable', validity, asid, gpa),
+		NPTEntry(asid, gpa, spa)
+	]
+	--[
+		RMPUpdate(spa, 'GVM', 'immutable', validity, asid, '0'),
+		FixGuestPage(asid, gpa, spa),
+		NPTClear(asid, gpa)
+	]->
+	[
+		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0')
+	]
+
 ////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////   FIRMWARE   /////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,6 +189,45 @@ rule FirmwareRelinquishPage:
 	]->
 	[
 		RMPEntry(spa, 'FW', 'mutable', 'invalid', '0', '0')
+	]
+
+rule FirmwareUnfixGuestPage:
+	[
+		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0'),
+		!GuestID(asid),
+		Fr(gpa)
+	]
+	--[
+		FirmwareUnfixGuestPage(asid, gpa, spa),
+		NPTAssign(asid, gpa, spa)
+	]->
+	[
+		RMPEntry(spa, 'GVM', 'mutable', validity, asid, gpa),
+		NPTEntry(asid, gpa, spa)
+	]
+
+rule FirmwareSwapOut:
+	[
+		RMPEntry(spa, 'GVM', 'immutable', 'valid', asid, '0'),
+		!GuestID(asid)
+	]
+	--[
+		FirmwareSwapOut(asid, spa)
+	]->
+	[
+		RMPEntry(spa, 'GVM', 'immutable', 'invalid', asid, '0')
+	]
+
+rule FirmwareSwapIn:
+	[
+		RMPEntry(spa, 'GVM', 'immutable', 'invalid', asid, '0'),
+		!GuestID(asid)
+	]
+	--[
+		FirmwareSwapIn(asid, spa)
+	]->
+	[
+		RMPEntry(spa, 'GVM', 'immutable', 'valid', asid, '0')
 	]
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -394,6 +449,5 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest:
 			& Ex #k. GenerateVmpck(asid, vmpck) @ k
 				& k < j
 "
-
 
 end
