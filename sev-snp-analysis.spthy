@@ -230,6 +230,30 @@ rule FirmwareSwapIn:
 		RMPEntry(spa, 'GVM', 'immutable', 'valid', asid, '0')
 	]
 
+rule CreateGuestContextPage:
+       [
+               RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0'),
+               !GuestID(asid)
+       ]
+       --[
+               CreateGuestContextPage(spa, asid)
+       ]->
+       [
+               RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0')
+       ]
+
+rule DecommissionGuestContextPage:
+       [
+               RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+               !GuestID(asid)
+       ]
+       --[
+               DecommissionGuestContextPage(spa, asid)
+       ]->
+       [
+               RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
+       ]
+
 ////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////   GUEST VM   /////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
