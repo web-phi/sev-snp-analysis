@@ -402,6 +402,14 @@ lemma ExeGuestPageCanBeRevalidated: exists-trace
 		& i < j
 "
 
+lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
+"
+	Ex asid spa #i #j.
+		CreateGuestContextPage(spa, asid) @ i
+		& DecommissionGuestContextPage(spa, asid) @ j
+		& i < j
+"
+
 lemma PageCannotBeValidatedTwiceConsecutively:
 "
 	All asid gpa spa #i #j.
