@@ -15,6 +15,11 @@ restriction Unique:
 	All x #i #j. Uniq(x) @ i & Uniq(x) @ j ==> #i = #j
 "
 
+restriction NotEqual:
+"
+	All x #i. Neq(x, x) @ i ==> F
+"
+
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////   SYSTEM   //////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,7 +119,8 @@ rule AssignPageToGVM:
 	]->
 	[
 		RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
-		NPTEntry(asid, gpa, spa)
+		NPTEntry(asid, gpa, spa),
+		Out(<'GPA', gpa>)
 	]
 
 rule AssignPageToFW:
@@ -231,28 +237,56 @@ rule FirmwareSwapIn:
 	]
 
 rule CreateGuestContextPage:
-       [
-               RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0'),
-               !GuestID(asid)
-       ]
-       --[
-               CreateGuestContextPage(spa, asid)
-       ]->
-       [
-               RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0')
-       ]
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0'),
+		!GuestID(asid)
+	]
+	--[
+		CreateGuestContextPage(spa, asid)
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0')
+	]
 
 rule DecommissionGuestContextPage:
-       [
-               RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
-               !GuestID(asid)
-       ]
-       --[
-               DecommissionGuestContextPage(spa, asid)
-       ]->
-       [
-               RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
-       ]
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+		!GuestID(asid)
+	]
+	--[
+		DecommissionGuestContextPage(spa, asid)
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
+	]
+
+rule CreateGuestMetadataPage:
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0'),
+		!GuestID(asid),
+		In(<'GPA', gpa>)
+	]
+	--[
+		CreateGuestMetadataPage(spa, asid, gpa),
+		Neq(gpa, '0')
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, gpa)
+	]
+
+rule DecommissionGuestMetadataPage:
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, gpa),
+		!GuestID(asid)
+	]
+	--[
+		DecommissionGuestMetadataPage(spa, asid, gpa),
+		Neq(gpa, '0')
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
+	]
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////   GUEST VM   /////////////////////////////////
@@ -407,6 +441,14 @@ lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
 	Ex asid spa #i #j.
 		CreateGuestContextPage(spa, asid) @ i
 		& DecommissionGuestContextPage(spa, asid) @ j
+		& i < j
+"
+
+lemma ExeGuestMetadataPageCanBeDecommissioned: exists-trace
+"
+	Ex asid gpa spa #i #j.
+		CreateGuestMetadataPage(spa, asid, gpa) @ i
+		& DecommissionGuestMetadataPage(spa, asid, gpa) @ j
 		& i < j
 "
 
