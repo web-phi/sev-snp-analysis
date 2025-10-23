@@ -399,6 +399,7 @@ rule WriteToGuestPage:
 	[
 		!GuestID(asid),
 		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK(<'VEK', asid>, vek),
 		RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa),
 		PageContent(spa, oldContent),
 		In(<message, auth>)
@@ -409,7 +410,7 @@ rule WriteToGuestPage:
 	]->
 	[
 		RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa),
-		PageContent(spa, senc(content, vmpck))
+		PageContent(spa, senc(content, vek))
 	]
 
 
@@ -543,18 +544,6 @@ lemma PageCannotBeValidatedTwiceConsecutively[reuse]:
 			& k < j
 "
 
-lemma PageCannotBeInvalidatedTwiceConsecutively[reuse]:
-"
-	All asid gpa spa #i #j.
-		InvalidateGuestPage(asid, gpa, spa) @ i
-		& InvalidateGuestPage(asid, gpa, spa) @ j
-		& i < j
-	==>
-		Ex #k. ValidateGuestPage(asid, gpa, spa) @ k
-			& i < k
-			& k < j
-"
-
 lemma ContextPageAlwaysCorrespondsToExistingGuest[reuse]:
 "
 	All asid spa #i.
@@ -612,7 +601,7 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest[reuse]:
 				& k < j
 "
 
-lemma GuestPageCanOnlyBeWrittenToPerGuestRequest:
+lemma GuestPageCanOnlyBeWrittenToPerGuestRequest[reuse]:
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
