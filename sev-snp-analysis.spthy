@@ -179,7 +179,9 @@ rule FixGuestPage:
 		In(<'RMP_UPDATE', spa, asid, 'immutable'>),
 		!GuestID(asid),
 		RMPEntry(spa, 'GVM', 'mutable', validity, asid, gpa),
-		NPTEntry(asid, gpa, spa)
+		NPTEntry(asid, gpa, spa),
+		RMPEntry(spa2, 'FW', 'immutable', 'invalid', asid, gpa),
+		PageContent(spa2, '0')
 	]
 	--[
 		RMPUpdate(spa, 'GVM', 'immutable', validity, asid, '0'),
@@ -187,7 +189,9 @@ rule FixGuestPage:
 		NPTClear(asid, gpa)
 	]->
 	[
-		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0')
+		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0'),
+		RMPEntry(spa2, 'FW', 'immutable', 'invalid', asid, gpa),
+		PageContent(spa2, spa)
 	]
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,15 +214,19 @@ rule FirmwareUnfixGuestPage:
 	[
 		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0'),
 		!GuestID(asid),
-		Fr(gpa)
+		RMPEntry(spa2, 'FW', 'immutable', 'invalid', asid, gpa),
+		PageContent(spa2, spa)
 	]
 	--[
+		RMPUpdate(spa, 'GVM', 'mutable', validity, asid, gpa),
 		FirmwareUnfixGuestPage(asid, gpa, spa),
 		NPTAssign(asid, gpa, spa)
 	]->
 	[
 		RMPEntry(spa, 'GVM', 'mutable', validity, asid, gpa),
-		NPTEntry(asid, gpa, spa)
+		NPTEntry(asid, gpa, spa),
+		RMPEntry(spa2, 'FW', 'immutable', 'invalid', asid, gpa),
+		PageContent(spa2, spa)
 	]
 
 rule FirmwareSwapOut:
