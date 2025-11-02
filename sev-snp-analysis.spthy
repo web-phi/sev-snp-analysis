@@ -445,12 +445,6 @@ lemma Types[sources]:
 	==>
 		Ex spa #j. NPTAssign(asid, gpa, spa) @ j
 			& j < i)
-	// &
-	// (All spa content #i.
-	// 	HypervisorReadPage(spa, content) @ i
-	// ==>
-	// 	Ex #j. (spa, content) @ j
-	// 		& j < i)
 "
 
 lemma ExeHypervisorCanFixPage: exists-trace
