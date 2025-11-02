@@ -15,11 +15,6 @@ restriction Unique:
 	All x #i #j. Uniq(x) @ i & Uniq(x) @ j ==> #i = #j
 "
 
-// restriction NotEqual:
-// "
-// 	All x #i. Neq(x, x) @ i ==> F
-// "
-
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////   SYSTEM   //////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,21 +76,6 @@ rule GenerateVek:
 	[
 		!LTK(<'VEK', asid>, vek),
 		Out(<'VEK', asid, h(vek)>)
-	]
-
-rule GenerateOek:
-	[
-		!GuestID(asid),
-		Fr(oek)
-	]
-	--[
-		GenerateOek(asid, oek),
-		Uniq(<'OEK', asid>),
-		Uniq(oek)
-	]->
-	[
-		!LTK(<'OEK', asid>, oek),
-		Out(<'OEK', asid, h(oek)>)
 	]
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,6 +168,20 @@ rule FixGuestPage:
 	]->
 	[
 		RMPEntry(spa, 'GVM', 'immutable', validity, asid, '0')
+	]
+
+rule HypervisorWriteOnPage:
+	[
+		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+		PageContent(spa, oldContent),
+		Fr(content)
+	]
+	--[
+		WriteToHypervisorPage(spa, content)
+	]->
+	[
+		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
+		PageContent(spa, content)
 	]
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -296,6 +290,21 @@ rule DecommissionGuestMetadataPage:
 		RMPEntry(spa, 'FW', 'immutable', 'invalid', '0', '0')
 	]
 
+rule WriteToGuestContextPage:
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+		!GuestID(asid),
+		!LTK(<'VEK', asid>, vek),
+		PageContent(spa, oldContent),
+		Fr(content)
+	]
+	--[
+		WriteToContextPage(spa, content)
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+		PageContent(spa, senc(content, vek))
+	]
 
 ////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////   GUEST VM   /////////////////////////////////
@@ -436,6 +445,12 @@ lemma Types[sources]:
 	==>
 		Ex spa #j. NPTAssign(asid, gpa, spa) @ j
 			& j < i)
+	// &
+	// (All spa content #i.
+	// 	HypervisorReadPage(spa, content) @ i
+	// ==>
+	// 	Ex #j. (spa, content) @ j
+	// 		& j < i)
 "
 
 lemma ExeHypervisorCanFixPage: exists-trace
@@ -532,7 +547,7 @@ lemma ExeGuestCanWriteToPage: exists-trace
 		& j < k
 "
 
-lemma PageCannotBeValidatedTwiceConsecutively[reuse]:
+lemma PageCannotBeValidatedTwiceConsecutively:
 "
 	All asid gpa spa #i #j.
 		ValidateGuestPage(asid, gpa, spa) @ i
@@ -544,7 +559,7 @@ lemma PageCannotBeValidatedTwiceConsecutively[reuse]:
 			& k < j
 "
 
-lemma ContextPageAlwaysCorrespondsToExistingGuest[reuse]:
+lemma ContextPageAlwaysCorrespondsToExistingGuest:
 "
 	All asid spa #i.
 		CreateGuestContextPage(spa, asid) @ i
@@ -553,19 +568,19 @@ lemma ContextPageAlwaysCorrespondsToExistingGuest[reuse]:
 			& j < i
 "
 
-lemma GuestAddressMapsToUniqueSystemAddress[reuse]:
+lemma GuestAddressMapsToUniqueSystemAddress:
 "
 	All asid gpa spa1 spa2 #i #k.
 		NPTAssign(asid, gpa, spa1) @ i
 		& NPTAssign(asid, gpa, spa2) @ k
 		& i < k
 	==>
-		Ex #j. NPTClear(asid, gpa) @ j
+		Ex #j. ReclaimPage(spa1) @ j
 			& i < j
 			& j < k
 "
 
-lemma SystemAddressMapsToUniqueGuestAddress[reuse]:
+lemma SystemAddressMapsToUniqueGuestAddress:
 "
 	All spa validity1 validity2 asid1 asid2 gpa1 gpa2 #i #k.
 		RMPUpdate(spa, 'GVM', 'mutable', validity1, asid1, gpa1) @ i
@@ -577,7 +592,7 @@ lemma SystemAddressMapsToUniqueGuestAddress[reuse]:
 			& j < k
 "
 
-lemma PageCanOnlyBeValidatedPerGuestRequest[reuse]:
+lemma PageCanOnlyBeValidatedPerGuestRequest:
 "
 	All asid gpa spa #i.
 		ValidateGuestPage(asid, gpa, spa) @ i
@@ -589,7 +604,7 @@ lemma PageCanOnlyBeValidatedPerGuestRequest[reuse]:
 				& k < j
 "
 
-lemma PageCanOnlyBeInvalidatedPerGuestRequest[reuse]:
+lemma PageCanOnlyBeInvalidatedPerGuestRequest:
 "
 	All asid gpa spa #i.
 		InvalidateGuestPage(asid, gpa, spa) @ i
@@ -601,7 +616,23 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest[reuse]:
 				& k < j
 "
 
-lemma GuestPageCanOnlyBeWrittenToPerGuestRequest[reuse]:
+lemma AdversaryCannotReadContentsOfGuestPage:
+"
+	All asid gpa spa content #i.
+		WriteToGuestPage(asid, gpa, spa, content) @ i
+	==>
+		not (Ex #j. K(content) @ j & i < j)
+"
+
+lemma AdversaryCannotReadContentsOfContextPage:
+"
+	All  spa content #i.
+		WriteToContextPage(spa, content) @ i
+	==>
+		not (Ex #j. K(content) @ j & i < j)
+"
+
+lemma GuestPageCanOnlyBeWrittenToPerGuestRequest:
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
