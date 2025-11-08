@@ -532,14 +532,12 @@ lemma ExeMetadataPageCanBeCreatedForValidGuestGPA: exists-trace
 
 lemma ExeGuestCanWriteToPage: exists-trace
 "
-	Ex asid gpa spa content #i #j #k #l. 
+	Ex asid gpa spa content #i #j #k. 
 		DeployGuest(asid) @ i
 		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ j
-		& RMPUpdate(spa, 'GVM', 'mutable', 'valid', asid, gpa) @ k
-		& WriteToGuestPage(asid, gpa, spa, content) @ l
+		& WriteToGuestPage(asid, gpa, spa, content) @ k
 		& i < j
 		& j < k
-		& k < l
 "
 
 lemma PageCannotBeValidatedTwiceConsecutively [reuse]:
