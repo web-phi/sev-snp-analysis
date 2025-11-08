@@ -568,7 +568,7 @@ lemma GuestAddressMapsToUniqueSystemAddress [reuse]:
 		& NPTAssign(asid, gpa, spa2) @ k
 		& i < k
 	==>
-		Ex #j. NPTClear(asid, gpa) @ j
+		Ex #j. ReclaimPage(spa1) @ j
 			& i < j
 			& j < k
 "
