@@ -618,6 +618,7 @@ lemma AdversaryCannotReadContentsOfGuestPage [reuse]:
 		not (Ex #j. K(content) @ j & i < j)
 "
 
+<<<<<<< HEAD
 lemma AdversaryCannotReadContentsOfContextPage [reuse]:
 "
 	All  spa content #i.
@@ -627,6 +628,9 @@ lemma AdversaryCannotReadContentsOfContextPage [reuse]:
 "
 
 lemma GuestPageCanOnlyBeWrittenToPerGuestRequest:
+=======
+lemma GuestPageCanOnlyBeWrittenToPerGuestRequest[reuse]:
+>>>>>>> 6f91922 (tidying up)
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
