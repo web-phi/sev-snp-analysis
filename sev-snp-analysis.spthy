@@ -264,7 +264,8 @@ rule WriteToGuestContextPage:
 	]->
 	[
 		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
-		PageContent(spa, senc(content, vek))
+		PageContent(spa, senc(content, vek)),
+		Out(senc(content, vek))
 	]
 
 rule DecommissionGuestContextPage:
@@ -435,7 +436,8 @@ rule WriteToGuestPage:
 	]->
 	[
 		RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa),
-		PageContent(spa, senc(content, vek))
+		PageContent(spa, senc(content, vek)),
+		Out(senc(content, vek))
 	]
 
 
@@ -460,6 +462,12 @@ lemma Types [sources]:
 		GuestSendRequest(<<'WRITE', asid, gpa, content>, auth>) @ i
 	==>
 		Ex spa #j. NPTAssign(asid, gpa, spa) @ j
+			& j < i)
+	&
+	(All asid gpa spa content #i.
+		WriteToGuestPage(asid, gpa, spa, content) @ i
+	==>
+		Ex key auth #j. GuestSendRequest(<<'WRITE', asid, gpa, senc(content, key)>, auth>) @ j
 			& j < i)
 "
 
@@ -491,10 +499,12 @@ lemma ExePageCanBeReclaimedFromFirmware: exists-trace
 
 lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 "
-	Ex spa asid gpa1 gpa2 #i #j.
+	Ex spa asid gpa1 gpa2 #i #j #k.
 		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa1) @ i
-		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa2) @ j
+		& ReclaimPage(spa) @ j
+		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa2) @ k
 		& i < j
+		& j < k
 "
 
 lemma ExeGuestPageCanBeValidated: exists-trace
@@ -509,10 +519,12 @@ lemma ExeGuestPageCanBeInvalidated: exists-trace
 
 lemma ExeGuestPageCanBeRevalidated: exists-trace
 "
-	Ex asid gpa spa #i #j.
+	Ex asid gpa spa #i #j #k.
 		ValidateGuestPage(asid, gpa, spa) @ i
-		& ValidateGuestPage(asid, gpa, spa) @ j
+		& InvalidateGuestPage(asid, gpa, spa) @j
+		& ValidateGuestPage(asid, gpa, spa) @ k
 		& i < j
+		& j < k
 "
 
 lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
@@ -549,12 +561,14 @@ lemma ExeMetadataPageCanBeCreatedForValidGuestGPA: exists-trace
 
 lemma ExeGuestCanWriteToPage: exists-trace
 "
-	Ex asid gpa spa content #i #j #k. 
+	Ex asid gpa spa content #i #j #k #l. 
 		DeployGuest(asid) @ i
 		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ j
-		& WriteToGuestPage(asid, gpa, spa, content) @ k
+		& RMPUpdate(spa, 'GVM', 'mutable', 'valid', asid, gpa) @ k
+		& WriteToGuestPage(asid, gpa, spa, content) @ l
 		& i < j
 		& j < k
+		& k < l
 "
 
 lemma PageCannotBeValidatedTwiceConsecutively [reuse]:
@@ -626,6 +640,22 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest [reuse]:
 				& k < j
 "
 
+lemma AdversaryCannotLearnVmpck [reuse]:
+"
+	All asid vmpck #i.
+		GenerateVmpck(asid, vmpck) @ i
+	==>
+		not (Ex #j. K(vmpck) @ j & i < j)
+"
+
+lemma AdversaryCannotLearnVek [reuse]:
+"
+	All asid vek #i.
+		GenerateVek(asid, vek) @ i
+	==>
+		not (Ex #j. K(vek) @ j & i < j)
+"
+
 lemma AdversaryCannotReadContentsOfGuestPage [reuse]:
 "
 	All asid gpa spa content #i.
@@ -650,12 +680,16 @@ lemma AdversaryCannotReadContentsOfContextPage [reuse]:
 "
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 lemma GuestPageCanOnlyBeWrittenToPerGuestRequest:
 =======
 =======
 >>>>>>> 081caea (add writing to context pages)
 lemma GuestPageCanOnlyBeWrittenToPerGuestRequest[reuse]:
 >>>>>>> 6f91922 (tidying up)
+=======
+lemma GuestPageCanOnlyBeWrittenToPerGuestRequest [reuse]:
+>>>>>>> 930ed6d (add page content reveal)
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
