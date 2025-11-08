@@ -15,11 +15,6 @@ restriction Unique:
 	All x #i #j. Uniq(x) @ i & Uniq(x) @ j ==> #i = #j
 "
 
-// restriction NotEqual:
-// "
-// 	All x #i. Neq(x, x) @ i ==> F
-// "
-
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////   SYSTEM   //////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,21 +76,6 @@ rule GenerateVek:
 	[
 		!LTK(<'VEK', asid>, vek),
 		Out(<'VEK', asid, h(vek)>)
-	]
-
-rule GenerateOek:
-	[
-		!GuestID(asid),
-		Fr(oek)
-	]
-	--[
-		GenerateOek(asid, oek),
-		Uniq(<'OEK', asid>),
-		Uniq(oek)
-	]->
-	[
-		!LTK(<'OEK', asid>, oek),
-		Out(<'OEK', asid, h(oek)>)
 	]
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -599,6 +579,14 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest[reuse]:
 			& j < i
 			& Ex #k. GenerateVmpck(asid, vmpck) @ k
 				& k < j
+"
+
+lemma AdversaryCannotReadContentsOfGuestPage [reuse]:
+"
+	All asid gpa spa content #i.
+		WriteToGuestPage(asid, gpa, spa, content) @ i
+	==>
+		not (Ex #j. K(content) @ j & i < j)
 "
 
 lemma GuestPageCanOnlyBeWrittenToPerGuestRequest[reuse]:
