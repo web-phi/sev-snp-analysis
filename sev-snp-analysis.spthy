@@ -431,7 +431,7 @@ rule WriteToGuestPage:
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-lemma Types[sources]:
+lemma Types [sources]:
 "
 	(All asid gpa validity auth #i.
 		GuestSendRequest(<<'PAGE_VALIDATE', asid, gpa, validity>, auth>) @ i
@@ -541,7 +541,7 @@ lemma ExeGuestCanWriteToPage: exists-trace
 		& j < k
 "
 
-lemma PageCannotBeValidatedTwiceConsecutively:
+lemma PageCannotBeValidatedTwiceConsecutively [reuse]:
 "
 	All asid gpa spa #i #j.
 		ValidateGuestPage(asid, gpa, spa) @ i
@@ -553,7 +553,7 @@ lemma PageCannotBeValidatedTwiceConsecutively:
 			& k < j
 "
 
-lemma ContextPageAlwaysCorrespondsToExistingGuest:
+lemma ContextPageAlwaysCorrespondsToExistingGuest [reuse]:
 "
 	All asid spa #i.
 		CreateGuestContextPage(spa, asid) @ i
@@ -562,7 +562,7 @@ lemma ContextPageAlwaysCorrespondsToExistingGuest:
 			& j < i
 "
 
-lemma GuestAddressMapsToUniqueSystemAddress:
+lemma GuestAddressMapsToUniqueSystemAddress [reuse]:
 "
 	All asid gpa spa1 spa2 #i #k.
 		NPTAssign(asid, gpa, spa1) @ i
@@ -574,7 +574,7 @@ lemma GuestAddressMapsToUniqueSystemAddress:
 			& j < k
 "
 
-lemma SystemAddressMapsToUniqueGuestAddress:
+lemma SystemAddressMapsToUniqueGuestAddress [reuse]:
 "
 	All spa validity1 validity2 asid1 asid2 gpa1 gpa2 #i #k.
 		RMPUpdate(spa, 'GVM', 'mutable', validity1, asid1, gpa1) @ i
@@ -586,7 +586,7 @@ lemma SystemAddressMapsToUniqueGuestAddress:
 			& j < k
 "
 
-lemma PageCanOnlyBeValidatedPerGuestRequest:
+lemma PageCanOnlyBeValidatedPerGuestRequest [reuse]:
 "
 	All asid gpa spa #i.
 		ValidateGuestPage(asid, gpa, spa) @ i
@@ -598,7 +598,7 @@ lemma PageCanOnlyBeValidatedPerGuestRequest:
 				& k < j
 "
 
-lemma PageCanOnlyBeInvalidatedPerGuestRequest:
+lemma PageCanOnlyBeInvalidatedPerGuestRequest [reuse]:
 "
 	All asid gpa spa #i.
 		InvalidateGuestPage(asid, gpa, spa) @ i
@@ -610,7 +610,7 @@ lemma PageCanOnlyBeInvalidatedPerGuestRequest:
 				& k < j
 "
 
-lemma AdversaryCannotReadContentsOfGuestPage:
+lemma AdversaryCannotReadContentsOfGuestPage [reuse]:
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
@@ -618,7 +618,7 @@ lemma AdversaryCannotReadContentsOfGuestPage:
 		not (Ex #j. K(content) @ j & i < j)
 "
 
-lemma AdversaryCannotReadContentsOfContextPage:
+lemma AdversaryCannotReadContentsOfContextPage [reuse]:
 "
 	All  spa content #i.
 		WriteToContextPage(spa, content) @ i
