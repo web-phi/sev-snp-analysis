@@ -237,6 +237,22 @@ rule CreateGuestContextPage:
 		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0')
 	]
 
+rule WriteToGuestContextPage:
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+		!GuestID(asid),
+		!LTK(<'VEK', asid>, vek),
+		PageContent(spa, oldContent),
+		Fr(content)
+	]
+	--[
+		WriteToContextPage(spa, content)
+	]->
+	[
+		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
+		PageContent(spa, senc(content, vek))
+	]
+
 rule DecommissionGuestContextPage:
 	[
 		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
@@ -585,6 +601,14 @@ lemma AdversaryCannotReadContentsOfGuestPage [reuse]:
 "
 	All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
+	==>
+		not (Ex #j. K(content) @ j & i < j)
+"
+
+lemma AdversaryCannotReadContentsOfContextPage [reuse]:
+"
+	All spa content #i.
+		WriteToContextPage(spa, content) @ i
 	==>
 		not (Ex #j. K(content) @ j & i < j)
 "
