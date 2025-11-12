@@ -15,6 +15,11 @@ restriction Unique:
 	All x #i #j. Uniq(x) @ i & Uniq(x) @ j ==> #i = #j
 "
 
+restriction Neq:
+"
+	All x #i. Neq(x, x) @ i ==> F
+"
+
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////   SYSTEM   //////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +64,7 @@ rule GenerateVmpck:
 		Uniq(vmpck)
 	]->
 	[
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		Out(<'VMPCK', asid, h(vmpck)>)
 	]
 
@@ -74,7 +79,7 @@ rule GenerateVek:
 		Uniq(vek)
 	]->
 	[
-		!LTK(<'VEK', asid>, vek),
+		!LTK('VEK', asid, vek),
 		Out(<'VEK', asid, h(vek)>)
 	]
 
@@ -84,7 +89,6 @@ rule GenerateVek:
 
 rule HypervisorFixPage:
 	[
-		In(<'RMP_UPDATE', spa, 'HV', 'immutable'>),
 		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
 	]
 	--[
@@ -96,7 +100,6 @@ rule HypervisorFixPage:
 
 rule AssignPageToGVM:
 	[
-		In(<'RMP_UPDATE', spa, asid>),
 		!GuestID(asid),
 		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0'),
 		Fr(gpa)
@@ -114,7 +117,6 @@ rule AssignPageToGVM:
 
 rule AssignPageToFW:
 	[
-		In(<'RMP_UPDATE', spa, 'FW'>),
 		RMPEntry(spa, 'HV', 'mutable', 'invalid', '0', '0')
 	]
 	--[
@@ -127,7 +129,6 @@ rule AssignPageToFW:
 
 rule ReclaimPageFromGVM:
 	[
-		In(<'RMP_UPDATE', spa, 'HV'>),
 		!GuestID(asid),
 		NPTEntry(asid, gpa, spa),
 		RMPEntry(spa, 'GVM', 'mutable', valid, asid, gpa)
@@ -143,7 +144,6 @@ rule ReclaimPageFromGVM:
 
 rule ReclaimPageFromFW:
 	[
-		In(<'RMP_UPDATE', spa, 'HV'>),
 		RMPEntry(spa, 'FW', 'mutable', 'invalid', '0', '0')
 	]
 	--[
@@ -156,7 +156,6 @@ rule ReclaimPageFromFW:
 
 rule FixGuestPage:
 	[
-		In(<'RMP_UPDATE', spa, asid, 'immutable'>),
 		!GuestID(asid),
 		RMPEntry(spa, 'GVM', 'mutable', validity, asid, gpa),
 		NPTEntry(asid, gpa, spa)
@@ -241,7 +240,7 @@ rule WriteToGuestContextPage:
 	[
 		RMPEntry(spa, 'FW', 'immutable', 'invalid', asid, '0'),
 		!GuestID(asid),
-		!LTK(<'VEK', asid>, vek),
+		!LTK('VEK', asid, vek),
 		PageContent(spa, oldContent),
 		Fr(content)
 	]
@@ -301,18 +300,19 @@ rule DecommissionGuestMetadataPage:
 rule GuestRequestValidation:
 	let
 		message = <'PAGE_VALIDATE', asid, gpa, 'valid'>
+		auth = sign(message, vmpck)
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		NPTEntry(asid, gpa, spa)
 	]
 	--[
-		GuestSendRequest(<message, sign(message, vmpck)>)
+		GuestSendRequest(<message, auth>)
 	]->
 	[
 		NPTEntry(asid, gpa, spa),
-		Out(<message, sign(message, vmpck)>)
+		Out(<message, auth>)
 	]
 
 rule ValidateGuestPage:
@@ -322,7 +322,7 @@ rule ValidateGuestPage:
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		RMPEntry(spa, 'GVM', 'mutable', 'invalid', asid, gpa),
 		In(<message, auth>)
 	]
@@ -337,18 +337,19 @@ rule ValidateGuestPage:
 rule GuestRequestInvalidation:
 	let
 		message = <'PAGE_VALIDATE', asid, gpa, 'invalid'>
+		auth = sign(message, vmpck)
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		NPTEntry(asid, gpa, spa)
 	]
 	--[
-		GuestSendRequest(<message, sign(message, vmpck)>)
+		GuestSendRequest(<message, auth>)
 	]->
 	[
 		NPTEntry(asid, gpa, spa),
-		Out(<message, sign(message, vmpck)>)
+		Out(<message, auth>)
 	]
 
 rule InvalidateGuestPage:
@@ -358,7 +359,7 @@ rule InvalidateGuestPage:
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa),
 		In(<message, auth>)
 	]
@@ -373,19 +374,20 @@ rule InvalidateGuestPage:
 rule GuestRequestPageWrite:
 	let
 		message = <'WRITE', asid, gpa, senc(content, vmpck)>
+		auth = sign(message, vmpck)
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
+		!LTK('VMPCK', asid, vmpck),
 		NPTEntry(asid, gpa, spa),
 		Fr(content)
 	]
 	--[
-		GuestSendRequest(<message, sign(message, vmpck)>)
+		GuestSendRequest(<message, auth>)
 	]->
 	[
 		NPTEntry(asid, gpa, spa),
-		Out(<message, sign(message, vmpck)>)
+		Out(<message, auth>)
 	]
 
 rule WriteToGuestPage:
@@ -395,8 +397,8 @@ rule WriteToGuestPage:
 	in
 	[
 		!GuestID(asid),
-		!LTK(<'VMPCK', asid>, vmpck),
-		!LTK(<'VEK', asid>, vek),
+		!LTK('VMPCK', asid, vmpck),
+		!LTK('VEK', asid, vek),
 		RMPEntry(spa, 'GVM', 'mutable', 'valid', asid, gpa),
 		PageContent(spa, oldContent),
 		In(<message, auth>)
@@ -566,6 +568,7 @@ lemma GuestAddressMapsToUniqueSystemAddress [reuse]:
 	All asid gpa spa1 spa2 #i #k.
 		NPTAssign(asid, gpa, spa1) @ i
 		& NPTAssign(asid, gpa, spa2) @ k
+		& not (spa1 = spa2)
 		& i < k
 	==>
 		Ex #j. ReclaimPage(spa1) @ j
@@ -578,6 +581,7 @@ lemma SystemAddressMapsToUniqueGuestAddress [reuse]:
 	All spa validity1 validity2 asid1 asid2 gpa1 gpa2 #i #k.
 		RMPUpdate(spa, 'GVM', 'mutable', validity1, asid1, gpa1) @ i
 		& RMPUpdate(spa, 'GVM', 'mutable', validity2, asid2, gpa2) @ k
+		& not (<asid1, gpa1> = <asid2, gpa2>)
 		& i < k
 	==>
 		Ex #j. RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0')  @ j
