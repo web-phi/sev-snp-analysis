@@ -496,7 +496,7 @@ lemma ExePageCanBeReclaimedFromGuest: exists-trace
 	Ex asid gpa spa #t1 #t2 #t3.
 		PageCreate(spa) @ t1
 		& NPTAssign(asid, gpa, spa) @ t2
-		& NPTClear(asid, gpa) @ t3
+		& ReclaimPage(spa) @ t3
 		& t1 < t2
 		& t2 < t3
 "
