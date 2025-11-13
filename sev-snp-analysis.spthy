@@ -426,7 +426,6 @@ lemma Types [sources]:
 "
 	(All asid gpa validity auth #i.
 		GuestSendRequest(<<'PAGE_VALIDATE', asid, gpa, validity>, auth>) @ i
-		& (validity = 'valid' | validity = 'invalid')
 	==>
 		Ex spa #j. NPTAssign(asid, gpa, spa) @ j
 			& j < i)
@@ -440,118 +439,165 @@ lemma Types [sources]:
 	(All asid gpa spa content #i.
 		WriteToGuestPage(asid, gpa, spa, content) @ i
 	==>
-		Ex key auth #j. GuestSendRequest(<<'WRITE', asid, gpa, senc(content, key)>, auth>) @ j
+		Ex req key auth #j. GuestSendRequest(<req, auth>) @ j
+			& req = <'WRITE', asid, gpa, senc(content, key)>
 			& j < i)
 "
 
 lemma ExeHypervisorCanFixPage: exists-trace
 "
-	Ex spa #i. HypervisorFixPage(spa) @ i
+	Ex spa #t1 #t2. 
+		PageCreate(spa) @ t1
+		& HypervisorFixPage(spa) @ t2
+		& t1 < t2
 "
 
 lemma ExePageCanBeReclaimed: exists-trace
 "
-	Ex spa #i. ReclaimPage(spa) @ i
+	Ex spa #t1 #t2 #t3.
+		PageCreate(spa) @ t1
+		& AssignPage(spa) @ t2
+		& ReclaimPage(spa) @ t3
+		& t1 < t2
+		& t2 < t3
 "
 
 lemma ExePageCanBeReclaimedFromGuest: exists-trace
 "
-	Ex spa asid gpa #i #j.
-		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ i
-		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
-		& i < j
+	Ex spa asid gpa #t1 #t2.
+		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ t1
+		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ t2
+		& t1 < t2
 "
 
 lemma ExePageCanBeReclaimedFromFirmware: exists-trace
 "
-	Ex spa #i #j.
-		RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ i
-		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ j
-		& i < j
+	Ex spa #t1 #t2.
+		RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ t1
+		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ t2
+		& t1 < t2
 "
 
 lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 "
-	Ex spa asid gpa1 gpa2 #i #j #k.
-		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa1) @ i
-		& ReclaimPage(spa) @ j
-		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa2) @ k
-		& i < j
-		& j < k
+	Ex spa asid gpa1 gpa2 #t1 #t2 #t3 #t4.
+		DeployGuest(asid) @ t1
+		NPTAssign(asid, gpa1, spa) @ t2
+		& NPTClear(asid, gpa1) @ t3
+		& NPTAssign(asid, gpa2, spa) @ t4
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
 "
 
 lemma ExeGuestPageCanBeValidated: exists-trace
 "
-	Ex asid gpa spa #i. ValidateGuestPage(asid, gpa, spa) @ i
+	Ex asid gpa spa #t1 #t2 #t3.
+		DeployGuest(asid) @ t1
+		& NPTAssign(asid, gpa, spa) @ t2
+		& ValidateGuestPage(asid, gpa, spa) @ t3
+		& t1 < t2
+		& t2 < t3
 "
 
 lemma ExeGuestPageCanBeInvalidated: exists-trace
 "
-	Ex asid gpa spa #i. InvalidateGuestPage(asid, gpa, spa) @ i
+	Ex asid gpa spa #t1 #t2 #t3 #t4.
+		DeployGuest(asid) @ t1
+		& NPTAssign(asid, gpa, spa) @ t2
+		& ValidateGuestPage(asid, gpa, spa) @ t3
+		& InvalidateGuestPage(asid, gpa, spa) @ t4
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
 "
 
 lemma ExeGuestPageCanBeRevalidated: exists-trace
 "
-	Ex asid gpa spa #i #j #k.
-		ValidateGuestPage(asid, gpa, spa) @ i
-		& InvalidateGuestPage(asid, gpa, spa) @j
-		& ValidateGuestPage(asid, gpa, spa) @ k
-		& i < j
-		& j < k
-"
-
-lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
-"
-	Ex asid spa #i #j.
-		CreateGuestContextPage(spa, asid) @ i
-		& DecommissionGuestContextPage(spa, asid) @ j
-		& i < j
+	Ex asid gpa spa #t1 #t2 #t3 #t4 #t5.
+		DeployGuest(asid) @ t1
+		& NPTAssign(asid, gpa, spa) @ t2
+		& ValidateGuestPage(asid, gpa, spa) @ t3
+		& InvalidateGuestPage(asid, gpa, spa) @ t4
+		& ValidateGuestPage(asid, gpa, spa) @ t5
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
 "
 
 lemma ExeContextPageCanBeCreatedForValidGuestASID: exists-trace
 "
-	Ex asid spa #i #j.
-		DeployGuest(asid) @ i
-		& CreateGuestContextPage(spa, asid) @ j
-		& i < j
+	Ex asid spa #t1 #t2 #t3 #t4.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& AssignPage(spa) @ t3
+		& CreateGuestContextPage(spa, asid) @ t4
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
 "
 
-lemma ExeGuestMetadataPageCanBeDecommissioned: exists-trace
+lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
 "
-	Ex asid gpa spa #i #j.
-		CreateGuestMetadataPage(spa, asid, gpa) @ i
-		& DecommissionGuestMetadataPage(spa, asid, gpa) @ j
-		& i < j
+	Ex asid spa #t1 #t2 #t3 #t4 #t5.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& AssignPage(spa) @ t3
+		& CreateGuestContextPage(spa, asid) @ t4
+		& DecommissionxGuestContextPage(spa, asid) @ t5
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
 "
 
 lemma ExeMetadataPageCanBeCreatedForValidGuestGPA: exists-trace
 "
-	Ex asid gpa spa1 spa2 #i #j.
-		NPTAssign(asid, gpa, spa1) @ i
-		& CreateGuestMetadataPage(spa2, asid, gpa) @ j
-		& i < j
+	Ex asid gpa spa1 spa2 #t1 #t2 #t3 #t4 #t5 #t6.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa1) @ t2
+		& NPTAssign(asid, gpa, spa1) @ t3
+		& PageCreate(spa2) @ t4
+		& AssignPage(spa2) @ t5
+		& CreateGuestMetadataPage(spa2, asid, gpa) @ t6
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
+		& t5 < t6
+"
+
+lemma ExeGuestMetadataPageCanBeDecommissioned: exists-trace
+"
+	Ex asid gpa spa1 spa2 #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa1) @ t2
+		& NPTAssign(asid, gpa, spa1) @ t3
+		& PageCreate(spa2) @ t4
+		& AssignPage(spa2) @ t5
+		& CreateGuestMetadataPage(spa2, asid, gpa) @ t6
+		& DecommissionGuestMetadataPage(spa2, asid, gpa) @ t7
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
+		& t5 < t6
+		& t6 < t7
 "
 
 lemma ExeGuestCanWriteToPage: exists-trace
 "
-	Ex asid gpa spa content #i #j #k. 
-		DeployGuest(asid) @ i
-		& RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ j
-		& WriteToGuestPage(asid, gpa, spa, content) @ k
-		& i < j
-		& j < k
-"
-
-lemma PageCannotBeValidatedTwiceConsecutively [reuse]:
-"
-	All asid gpa spa #i #j.
-		ValidateGuestPage(asid, gpa, spa) @ i
-		& ValidateGuestPage(asid, gpa, spa) @ j
-		& i < j
-	==>
-		Ex #k. InvalidateGuestPage(asid, gpa, spa) @ k
-			& i < k
-			& k < j
+	Ex asid gpa spa content #t1 #t2 #t3 #t4 #t5. 
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& NPTAssign(asid, gpa, spa) @ t3
+		& ValidateGuestPage(asid, gpa, spa) @ t4
+		& WriteToGuestPage(asid, gpa, spa, content) @ t5
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
 "
 
 lemma ContextPageAlwaysCorrespondsToExistingGuest [reuse]:
@@ -596,18 +642,6 @@ lemma PageCanOnlyBeValidatedPerGuestRequest [reuse]:
 	==>
 		Ex msg vmpck #j. GuestSendRequest(<msg, sign(msg, vmpck)>) @ j
 			& msg = <'PAGE_VALIDATE', asid, gpa, 'valid'>
-			& j < i
-			& Ex #k. GenerateVmpck(asid, vmpck) @ k
-				& k < j
-"
-
-lemma PageCanOnlyBeInvalidatedPerGuestRequest [reuse]:
-"
-	All asid gpa spa #i.
-		InvalidateGuestPage(asid, gpa, spa) @ i
-	==>
-		Ex msg vmpck #j. GuestSendRequest(<msg, sign(msg, vmpck)>) @ j
-			& msg = <'PAGE_VALIDATE', asid, gpa, 'invalid'>
 			& j < i
 			& Ex #k. GenerateVmpck(asid, vmpck) @ k
 				& k < j
