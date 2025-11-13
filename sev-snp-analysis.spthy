@@ -517,7 +517,7 @@ lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 		DeployGuest(asid) @ t1
 		& PageCreate(spa) @ t2
 		& NPTAssign(asid, gpa1, spa) @ t3
-		& NPTClear(asid, gpa1) @ t4
+		& ReclaimPage(spa) @ t4
 		& NPTAssign(asid, gpa2, spa) @ t5
 		& t1 < t2
 		& t2 < t3
