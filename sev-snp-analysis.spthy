@@ -496,7 +496,7 @@ lemma ExePageCanBeReclaimedFromGuest: exists-trace
 	Ex asid gpa spa #t1 #t2 #t3.
 		PageCreate(spa) @ t1
 		& NPTAssign(asid, gpa, spa) @ t2
-		& ReclaimPage(spa) @ t3
+		& NPTClear(asid, gpa) @ t3
 		& t1 < t2
 		& t2 < t3
 "
@@ -513,50 +513,58 @@ lemma ExePageCanBeReclaimedFromFirmware: exists-trace
 
 lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 "
-	Ex spa asid gpa1 gpa2 #t1 #t2 #t3 #t4.
+	Ex spa asid gpa1 gpa2 #t1 #t2 #t3 #t4 #t5.
 		DeployGuest(asid) @ t1
-		& NPTAssign(asid, gpa1, spa) @ t2
-		& NPTClear(asid, gpa1) @ t3
-		& NPTAssign(asid, gpa2, spa) @ t4
-		& t1 < t2
-		& t2 < t3
-		& t3 < t4
-"
-
-lemma ExeGuestPageCanBeValidated: exists-trace
-"
-	Ex asid gpa spa #t1 #t2 #t3.
-		DeployGuest(asid) @ t1
-		& NPTAssign(asid, gpa, spa) @ t2
-		& ValidateGuestPage(asid, gpa, spa) @ t3
-		& t1 < t2
-		& t2 < t3
-"
-
-lemma ExeGuestPageCanBeInvalidated: exists-trace
-"
-	Ex asid gpa spa #t1 #t2 #t3 #t4.
-		DeployGuest(asid) @ t1
-		& NPTAssign(asid, gpa, spa) @ t2
-		& ValidateGuestPage(asid, gpa, spa) @ t3
-		& InvalidateGuestPage(asid, gpa, spa) @ t4
-		& t1 < t2
-		& t2 < t3
-		& t3 < t4
-"
-
-lemma ExeGuestPageCanBeRevalidated: exists-trace
-"
-	Ex asid gpa spa #t1 #t2 #t3 #t4 #t5.
-		DeployGuest(asid) @ t1
-		& NPTAssign(asid, gpa, spa) @ t2
-		& ValidateGuestPage(asid, gpa, spa) @ t3
-		& InvalidateGuestPage(asid, gpa, spa) @ t4
-		& ValidateGuestPage(asid, gpa, spa) @ t5
+		& PageCreate(spa) @ t2
+		& NPTAssign(asid, gpa1, spa) @ t3
+		& NPTClear(asid, gpa1) @ t4
+		& NPTAssign(asid, gpa2, spa) @ t5
 		& t1 < t2
 		& t2 < t3
 		& t3 < t4
 		& t4 < t5
+"
+
+lemma ExeGuestPageCanBeValidated: exists-trace
+"
+	Ex asid gpa spa #t1 #t2 #t3 #t4.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& NPTAssign(asid, gpa, spa) @ t3
+		& ValidateGuestPage(asid, gpa, spa) @ t4
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+"
+
+lemma ExeGuestPageCanBeInvalidated: exists-trace
+"
+	Ex asid gpa spa #t1 #t2 #t3 #t4 #t5.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& NPTAssign(asid, gpa, spa) @ t3
+		& ValidateGuestPage(asid, gpa, spa) @ t4
+		& InvalidateGuestPage(asid, gpa, spa) @ t5
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
+"
+
+lemma ExeGuestPageCanBeRevalidated: exists-trace
+"
+	Ex asid gpa spa #t1 #t2 #t3 #t4 #t5 #t6.
+		DeployGuest(asid) @ t1
+		& PageCreate(spa) @ t2
+		& NPTAssign(asid, gpa, spa) @ t3
+		& ValidateGuestPage(asid, gpa, spa) @ t4
+		& InvalidateGuestPage(asid, gpa, spa) @ t5
+		& ValidateGuestPage(asid, gpa, spa) @ t6
+		& t1 < t2
+		& t2 < t3
+		& t3 < t4
+		& t4 < t5
+		& t5 < t6
 "
 
 lemma ExeContextPageCanBeCreatedForValidGuestASID: exists-trace
