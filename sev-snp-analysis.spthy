@@ -464,25 +464,29 @@ lemma ExePageCanBeReclaimed: exists-trace
 
 lemma ExePageCanBeReclaimedFromGuest: exists-trace
 "
-	Ex spa asid gpa #t1 #t2.
-		RMPUpdate(spa, 'GVM', 'mutable', 'invalid', asid, gpa) @ t1
-		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ t2
+	Ex asid gpa spa #t1 #t2 #t3.
+		PageCreate(spa) @ t1
+		& NPTAssign(asid, gpa, spa) @ t2
+		& ReclaimPage(spa) @ t3
 		& t1 < t2
+		& t2 < t3
 "
 
 lemma ExePageCanBeReclaimedFromFirmware: exists-trace
 "
-	Ex spa #t1 #t2.
-		RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ t1
-		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ t2
+	Ex spa #t1 #t2 #t3.
+		PageCreate(spa) @ t1
+		& RMPUpdate(spa, 'FW', 'immutable', 'invalid', '0', '0') @ t2
+		& RMPUpdate(spa, 'HV', 'mutable', 'invalid', '0', '0') @ t3
 		& t1 < t2
+		& t2 < t3
 "
 
 lemma ExePageCanBeAssignedToSameGuestTwice: exists-trace
 "
 	Ex spa asid gpa1 gpa2 #t1 #t2 #t3 #t4.
 		DeployGuest(asid) @ t1
-		NPTAssign(asid, gpa1, spa) @ t2
+		& NPTAssign(asid, gpa1, spa) @ t2
 		& NPTClear(asid, gpa1) @ t3
 		& NPTAssign(asid, gpa2, spa) @ t4
 		& t1 < t2
@@ -545,7 +549,7 @@ lemma ExeGuestContextPageCanBeDecommissioned: exists-trace
 		& PageCreate(spa) @ t2
 		& AssignPage(spa) @ t3
 		& CreateGuestContextPage(spa, asid) @ t4
-		& DecommissionxGuestContextPage(spa, asid) @ t5
+		& DecommissionGuestContextPage(spa, asid) @ t5
 		& t1 < t2
 		& t2 < t3
 		& t3 < t4
